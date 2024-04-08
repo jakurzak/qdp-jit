@@ -161,5 +161,8 @@
 /* ROCM install path */
 #cmakedefine ROCM_DIR				"@ROCM_DIR@"
 
+#cmakedefine QDPJIT_INSTALL_DIR			"@QDPJIT_INSTALL_DIR@"
+
+
 #define PACKAGE_STRING  "@PROJECT_NAME@"
 #define PACKAGE_VERSION "@QDP-JIT_VERSION@"

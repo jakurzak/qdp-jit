@@ -56,6 +56,9 @@ namespace QDP
     
     std::vector<std::string> extra_libs;
     std::string prepend_path = "./";
+
+    std::string libdevice_name = "libomptarget-new-amdgpu-gfx90a-5.4.3.bc";
+    std::string libdevice_path = "/libdevice/";
 #endif
 
 #ifdef QDP_BACKEND_CUDA
@@ -210,6 +213,10 @@ namespace QDP
 
   
 #ifdef QDP_BACKEND_ROCM
+  std::string jit_config_get_libdevice_path() { return libdevice_path; }
+  std::string jit_config_get_libdevice_name() { return libdevice_name; }
+
+  
   std::string jit_config_get_prepend_path() { return prepend_path; }
   void        jit_config_set_prepend_path(std::string s) { prepend_path = s; }
   

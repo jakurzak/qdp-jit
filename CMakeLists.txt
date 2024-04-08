@@ -125,6 +125,8 @@ if( ${QDP_ENABLE_BACKEND} STREQUAL "ROCM")
     set(GPU_LIBS ${GPU_LIBS};amd_comgr)
   endif()
   set(ROCM_DIR ${ROCM_PATH})
+  install(FILES libdevice/libomptarget-new-amdgpu-gfx90a-5.4.3.bc DESTINATION libdevice)
+  set(QDPJIT_INSTALL_DIR "${CMAKE_INSTALL_PREFIX}")
 endif()
  
 set(QDP_IS_QDPJIT "1")

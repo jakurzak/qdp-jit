@@ -191,7 +191,10 @@ namespace QDP {
 	if (strcmp((*argv)[i], "-h")==0)
 	  help_flag = true;
       }
-		
+
+    bool libdevice_path_set = false;
+    bool libdevice_name_set = false;
+
     setGeomP = false;
     logical_geom = 0;
 		
@@ -494,12 +497,14 @@ namespace QDP {
 	    char tmp[1024];
 	    sscanf((*argv)[++i], "%s", &tmp[0]);
 	    llvm_set_libdevice_path(tmp);
+	    libdevice_path_set = true;
 	  }
 	else if (strcmp((*argv)[i], "-libdevice-name")==0) 
 	  {
 	    char tmp[1024];
 	    sscanf((*argv)[++i], "%s", &tmp[0]);
 	    llvm_set_libdevice_name(tmp);
+	    libdevice_name_set = true;
 	  }
 	else if (strcmp((*argv)[i], "-cache-verbose")==0) 
 	  {
@@ -584,7 +589,22 @@ namespace QDP {
 	    QDP_abort(1);
 	  }
       }
-		
+
+
+#ifdef QDP_BACKEND_ROCM
+    if (!libdevice_path_set)
+      {
+	std::string tmp_path = std::string(QDPJIT_INSTALL_DIR) + jit_config_get_libdevice_path();
+	llvm_set_libdevice_path( tmp_path.c_str() );
+	jit_config_delayed_message("ROCm: libdevice path set to: " + tmp_path);
+      }
+    if (!libdevice_name_set)
+      {
+	std::string tmp_name = jit_config_get_libdevice_name();
+	llvm_set_libdevice_name( tmp_name.c_str() );
+	jit_config_delayed_message("ROCm: libdevice name set to: " + tmp_name);
+      }
+#endif
 
     //QDPIO::cout << "Not setting QMP verbosity level\n";
     QMP_verbose (QMP_verboseP);

@@ -55,6 +55,8 @@ namespace QDP
   void jit_config_set_pool_alignment(size_t size );
 
 #ifdef QDP_BACKEND_ROCM
+  std::string jit_config_get_libdevice_path();
+  std::string jit_config_get_libdevice_name();
   std::string jit_config_get_prepend_path();
   void        jit_config_set_prepend_path(std::string s);
   int  jit_config_get_codegen_opt();

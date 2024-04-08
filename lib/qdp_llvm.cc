@@ -180,6 +180,9 @@ namespace QDP
 
 
 #ifdef QDP_BACKEND_ROCM
+
+LLD_HAS_DRIVER(elf)
+
 namespace {
   int lldMain(int argc, const char **argv, llvm::raw_ostream &stdoutOS,
 	      llvm::raw_ostream &stderrOS, bool exitEarly = true)
@@ -187,7 +190,7 @@ namespace {
     bool ret;
     std::vector<const char *> args(argv, argv + argc);
 
-#if defined (QDP_LLVM15) || defined (QDP_LLVM16)
+#if defined (QDP_LLVM15) || defined (QDP_LLVM16) || defined (QDP_LLVM17)
     ret = lld::elf::link(args, stdoutOS, stderrOS, exitEarly, false);
 #else
     ret = lld::elf::link(args, exitEarly, stdoutOS, stderrOS);

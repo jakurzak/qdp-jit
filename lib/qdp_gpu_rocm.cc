@@ -27,7 +27,7 @@ namespace QDP {
 
     int deviceCount;
     int deviceId;     // the device we use
-    int gcnArch;
+    std::string gcnArchName;
 
     size_t mem_free, mem_total;
 
@@ -684,11 +684,14 @@ namespace QDP {
     max_blockx = roundDown2pow( prop.maxThreadsDim[0] );
     max_blocky = roundDown2pow( prop.maxThreadsDim[1] );
     max_blockz = roundDown2pow( prop.maxThreadsDim[2] );
-    gcnArch = prop.gcnArch;
+
+    std::string tmp(prop.gcnArchName);
+    gcnArchName = tmp.substr(0, tmp.find(":"));
     
     QDPIO::cout << "GPU autodetect\n";
     QDPIO::cout << "  Device name                         : " << std::string( prop.name ) << "\n";
-    QDPIO::cout << "  GCN architecture                    : gfx" << prop.gcnArch << "\n";
+    QDPIO::cout << "  GCN Architecture (reported)         : " << std::string( prop.gcnArchName ) << "\n";
+    QDPIO::cout << "  GCN Architecture (using)            : " << gcnArchName << "\n";
     QDPIO::cout << "  Shared memory                       : " << smem/1024  << " KB\n";
     QDPIO::cout << "  Max grid  (x,y,z)                   : (" << max_gridx << "," << max_gridy << "," << max_gridz << ")\n";
     QDPIO::cout << "  Max block (x,y,z)                   : (" << max_blockx << "," << max_blocky << "," << max_blockz << ")\n";
@@ -803,12 +806,7 @@ namespace QDP {
 
   std::string gpu_get_arch()
   {
-    if( gcnArch == 910 ) {
-      return "gfx90a";
-    }
-    else { 
-      return "gfx" + std::to_string(gcnArch);
-    }
+    return gcnArchName;
   }
 
 
