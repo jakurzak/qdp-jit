@@ -181,7 +181,9 @@ namespace QDP
 
 #ifdef QDP_BACKEND_ROCM
 
+#if defined (LLD_HAS_DRIVER)
 LLD_HAS_DRIVER(elf)
+#endif
 
 namespace {
   int lldMain(int argc, const char **argv, llvm::raw_ostream &stdoutOS,
