@@ -590,7 +590,7 @@ namespace QDP {
 	  }
       }
 
-
+#if 0
 #ifdef QDP_BACKEND_ROCM
     if (!libdevice_path_set)
       {
@@ -605,7 +605,8 @@ namespace QDP {
 	jit_config_delayed_message("ROCm: libdevice name set to: " + tmp_name);
       }
 #endif
-
+#endif
+    
     //QDPIO::cout << "Not setting QMP verbosity level\n";
     QMP_verbose (QMP_verboseP);
 		

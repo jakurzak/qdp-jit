@@ -519,7 +519,8 @@ namespace QDP
     libs.push_back(std::string(ROCM_DIR) + "/amdgcn/bitcode/oclc_unsafe_math_off.bc");
     libs.push_back(std::string(ROCM_DIR) + "/amdgcn/bitcode/oclc_daz_opt_off.bc");
     libs.push_back(std::string(ROCM_DIR) + "/amdgcn/bitcode/oclc_correctly_rounded_sqrt_on.bc");
-  
+    libs.push_back(std::string(ROCM_DIR) + "/amdgcn/bitcode/oclc_abi_version_500.bc");
+    
     libs.insert( libs.end() , jit_config_get_extra_lib().begin() , jit_config_get_extra_lib().end() );
     
     module_ocml.clear();
