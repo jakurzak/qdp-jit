@@ -192,7 +192,7 @@ namespace {
     bool ret;
     std::vector<const char *> args(argv, argv + argc);
 
-#if defined (QDP_LLVM15) || defined (QDP_LLVM16) || defined (QDP_LLVM17)
+#if defined (QDP_LLVM15) || defined (QDP_LLVM16) || defined (QDP_LLVM17) || defined (QDP_LLVM18)
     ret = lld::elf::link(args, stdoutOS, stderrOS, exitEarly, false);
 #else
     ret = lld::elf::link(args, exitEarly, stdoutOS, stderrOS);
@@ -1251,7 +1251,7 @@ namespace QDP
     it_stack = builder->GetInsertPoint(); // probly bb_stack.begin()
     
     bb_afterstack = llvm::BasicBlock::Create(*TheContext, "afterstack" );
-#if (defined (QDP_LLVM16) && !defined (QDP_ROCM553FIX) ) || defined (QDP_LLVM17)
+#if (defined (QDP_LLVM16) && !defined (QDP_ROCM553FIX) ) || defined (QDP_LLVM17) || defined (QDP_LLVM18)
     mainFunc->insert(mainFunc->end(), bb_afterstack);
 #else
     mainFunc->getBasicBlockList().push_back(bb_afterstack);
@@ -1737,7 +1737,11 @@ namespace QDP
     // return llvm_cast( llvm_type<bool>::value , u8 );
   }
   template<> ParamRef llvm_add_param<bool*>() { 
+#if defined (QDP_LLVM18)
+    vecParamType.push_back( llvm::PointerType::get( *TheContext,qdp_jit_config_get_global_addrspace()) ); 
+#else
     vecParamType.push_back( llvm::Type::getInt8PtrTy(*TheContext,qdp_jit_config_get_global_addrspace()) );
+#endif
     return vecParamType.size()-1;
   }
   template<> ParamRef llvm_add_param<int64_t>() { 
@@ -1749,7 +1753,11 @@ namespace QDP
     return vecParamType.size()-1;
   }
   template<> ParamRef llvm_add_param<int*>() { 
+#if defined (QDP_LLVM18)
+    vecParamType.push_back( llvm::PointerType::get( *TheContext,qdp_jit_config_get_global_addrspace()) ); 
+#else
     vecParamType.push_back( llvm::Type::getInt32PtrTy(*TheContext,qdp_jit_config_get_global_addrspace()) );
+#endif
     return vecParamType.size()-1;
   }
   template<> ParamRef llvm_add_param<jit_half_t>() { 
@@ -1761,11 +1769,19 @@ namespace QDP
     return vecParamType.size()-1;
   }
   template<> ParamRef llvm_add_param<jit_half_t*>() { 
+#if defined (QDP_LLVM18)
+    vecParamType.push_back( llvm::PointerType::get( *TheContext,qdp_jit_config_get_global_addrspace()) ); 
+#else
     vecParamType.push_back( llvm::Type::getHalfPtrTy(*TheContext,qdp_jit_config_get_global_addrspace()) );
+#endif
     return vecParamType.size()-1;
   }
   template<> ParamRef llvm_add_param<float*>() { 
+#if defined (QDP_LLVM18)
+    vecParamType.push_back( llvm::PointerType::get( *TheContext,qdp_jit_config_get_global_addrspace()) ); 
+#else
     vecParamType.push_back( llvm::Type::getFloatPtrTy(*TheContext,qdp_jit_config_get_global_addrspace()) );
+#endif
     return vecParamType.size()-1;
   }
   template<> ParamRef llvm_add_param<double>() { 
@@ -1773,20 +1789,36 @@ namespace QDP
     return vecParamType.size()-1;
   }
   template<> ParamRef llvm_add_param<double*>() { 
+#if defined (QDP_LLVM18)
+    vecParamType.push_back( llvm::PointerType::get( *TheContext,qdp_jit_config_get_global_addrspace()) ); 
+#else
     vecParamType.push_back( llvm::Type::getDoublePtrTy(*TheContext,qdp_jit_config_get_global_addrspace()) );
+#endif
     return vecParamType.size()-1;
   }
 
   template<> ParamRef llvm_add_param<int**>() {
+#if defined (QDP_LLVM18)
+    vecParamType.push_back( llvm::PointerType::get( *TheContext,qdp_jit_config_get_global_addrspace()) ); 
+#else
     vecParamType.push_back( llvm::PointerType::get( llvm::Type::getInt32PtrTy(*TheContext , qdp_jit_config_get_global_addrspace() ) , qdp_jit_config_get_global_addrspace() ) );
+#endif
     return vecParamType.size()-1;
   }
   template<> ParamRef llvm_add_param<float**>() {
+#if defined (QDP_LLVM18)
+    vecParamType.push_back( llvm::PointerType::get( *TheContext,qdp_jit_config_get_global_addrspace()) ); 
+#else
     vecParamType.push_back( llvm::PointerType::get( llvm::Type::getFloatPtrTy(*TheContext , qdp_jit_config_get_global_addrspace() ) , qdp_jit_config_get_global_addrspace() ) );
+#endif
     return vecParamType.size()-1;
   }
   template<> ParamRef llvm_add_param<double**>() {
+#if defined (QDP_LLVM18)
+    vecParamType.push_back( llvm::PointerType::get( *TheContext,qdp_jit_config_get_global_addrspace()) ); 
+#else
     vecParamType.push_back( llvm::PointerType::get( llvm::Type::getDoublePtrTy(*TheContext , qdp_jit_config_get_global_addrspace() ) , qdp_jit_config_get_global_addrspace() ) );
+#endif
     return vecParamType.size()-1;
   }
 
@@ -1798,7 +1830,7 @@ namespace QDP
     std::ostringstream oss;
     oss << "L" << llvm_counters::label_counter++;
     llvm::BasicBlock *BB = llvm::BasicBlock::Create(*TheContext, oss.str() );
-#if (defined (QDP_LLVM16) && !defined (QDP_ROCM553FIX) ) || defined (QDP_LLVM17)
+#if (defined (QDP_LLVM16) && !defined (QDP_ROCM553FIX) ) || defined (QDP_LLVM17) || defined (QDP_LLVM18)
     mainFunc->insert(mainFunc->end(), BB);
 #else
     mainFunc->getBasicBlockList().push_back(BB);
@@ -1905,7 +1937,7 @@ namespace QDP
     llvm::FunctionType *FT = llvm::FunctionType::get( ret ,
     						      llvm::ArrayRef<llvm::Type*>( param_types.data() , param_types.size() ) , 
     						      false );
-#if (defined (QDP_LLVM14) && (!defined (QDP_ROCM5FIX))) || defined (QDP_LLVM15) || defined (QDP_LLVM16) || defined (QDP_LLVM17)
+#if (defined (QDP_LLVM14) && (!defined (QDP_ROCM5FIX))) || defined (QDP_LLVM15) || defined (QDP_LLVM16) || defined (QDP_LLVM17) || defined (QDP_LLVM18)
     llvm::AttrBuilder ABuilder(*TheContext);
 #else
     llvm::AttrBuilder ABuilder;
@@ -1949,7 +1981,7 @@ namespace QDP
   {
     llvm::FunctionType *IntrinFnTy = llvm::FunctionType::get(llvm::Type::getVoidTy(*TheContext), false);
 
-#if (defined (QDP_LLVM14) && (!defined (QDP_ROCM5FIX))) || defined (QDP_LLVM15) || defined (QDP_LLVM16) || defined (QDP_LLVM17)
+#if (defined (QDP_LLVM14) && (!defined (QDP_ROCM5FIX))) || defined (QDP_LLVM15) || defined (QDP_LLVM16) || defined (QDP_LLVM17)|| defined (QDP_LLVM18)
     llvm::AttrBuilder ABuilder(*TheContext);
 #else
     llvm::AttrBuilder ABuilder;
@@ -2063,8 +2095,14 @@ namespace QDP
     std::string str;
     llvm::raw_string_ostream rss(str);
     llvm::buffer_ostream bos(rss);
-    
-    if (TargetMachine->addPassesToEmitFile(PM, bos , nullptr ,  llvm::CGFT_AssemblyFile )) {
+
+
+#if defined (QDP_LLVM18)
+    if (TargetMachine->addPassesToEmitFile(PM, bos , nullptr ,  llvm::CodeGenFileType::AssemblyFile ))
+#else
+    if (TargetMachine->addPassesToEmitFile(PM, bos , nullptr ,  llvm::CGFT_AssemblyFile ))
+#endif
+    {
       llvm::errs() << ": target does not support generation of this"
 		   << " file type!\n";
       QDP_abort(1);
@@ -2215,7 +2253,7 @@ namespace QDP
     PB.registerLoopAnalyses(LAM);
     PB.crossRegisterProxies(LAM, FAM, CGAM, MAM);
 
-#if defined (QDP_LLVM17)
+#if defined (QDP_LLVM17) || defined (QDP_LLVM18)
     ModulePassManager MPM = PB.buildPerModuleDefaultPipeline(OptimizationLevel::O0);
 #else
     ModulePassManager MPM = PB.buildO0DefaultPipeline(OptimizationLevel::O0);

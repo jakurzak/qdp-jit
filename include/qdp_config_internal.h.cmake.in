@@ -106,6 +106,9 @@
 /* Compile for LLVM 17.0 series */	
 #cmakedefine QDP_LLVM17				@QDP_LLVM17@
 
+/* Compile for LLVM 18.0 series */	
+#cmakedefine QDP_LLVM18				@QDP_LLVM18@
+
 /* Codegen uses vector instructions */	
 #cmakedefine QDP_CODEGEN_VECTOR			@QDP_CODEGEN_VECTOR@
 
