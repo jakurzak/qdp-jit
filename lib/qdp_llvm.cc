@@ -2538,7 +2538,11 @@ namespace QDP
 	  if (TargetMachine->addPassesToEmitFile(CodeGenPasses, 
 						 *isabin_fs,
 						 nullptr,
+#if defined (QDP_LLVM18)
+						 llvm::CodeGenFileType::ObjectFile ))
+#else
 						 llvm::CodeGenFileType::CGFT_ObjectFile ))
+#endif
 
 	    {
 	      QDPIO::cerr << "target does not support generation of object file type!\n";
