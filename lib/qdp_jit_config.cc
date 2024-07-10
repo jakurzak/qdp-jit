@@ -265,10 +265,11 @@ namespace QDP
   std::string jit_config_deep_log_name() { return deep_log_name; }
 
   void        jit_config_deep_log_start() { deep_log = true; }
+  void        jit_config_deep_log_stop() { deep_log = false; }
 
   void        jit_config_deep_set( std::string name , bool create )
   {
-    deep_log = false;
+    deep_log = true;
     deep_log_create = create;
     deep_log_name = name;
   }

@@ -371,7 +371,17 @@ void evaluate(OScalar<T>& dest, const Op& op, const QDPExpr<RHS,OScalar<T1> >& r
     inline
     OLattice& operator=(const OLattice& rhs)
     {
-      return this->assign(rhs);
+#ifdef QDP_DEEP_LOG
+      bool log_status = jit_config_deep_log();
+      if (log_status)
+	jit_config_deep_log_stop();
+#endif
+      this->assign(rhs);
+#ifdef QDP_DEEP_LOG
+      if (log_status)
+	jit_config_deep_log_start();
+#endif
+      return *this;
     }
 
 
@@ -389,8 +399,17 @@ void evaluate(OScalar<T>& dest, const Op& op, const QDPExpr<RHS,OScalar<T1> >& r
 
     OLattice(const OLattice& rhs)//: QDPType<T, OLattice<T> >()
     {
+#ifdef QDP_DEEP_LOG
+      bool log_status = jit_config_deep_log();
+      if (log_status)
+	jit_config_deep_log_stop();
+#endif
       alloc_mem("copy");
       this->assign(rhs);
+#ifdef QDP_DEEP_LOG
+      if (log_status)
+	jit_config_deep_log_start();
+#endif
     }
 
 
