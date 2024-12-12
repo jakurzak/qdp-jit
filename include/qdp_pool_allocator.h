@@ -40,8 +40,6 @@ namespace QDP
     void registerMemory();
     void unregisterMemory();
 
-    size_t getPoolSize();
-
     bool allocate      ( void** ptr , size_t n_bytes , int id );
     bool allocate_fixed( void** ptr , size_t n_bytes , int id );
 
@@ -94,7 +92,8 @@ namespace QDP
       QDPIO::cout << "----------------------------\n";
     }
 
-    
+    size_t getPoolSize() const { assert(bufferAllocated); return poolSize; }
+    void*  getPoolPtr() const { assert(bufferAllocated); return unaligned; }
     
   private:
     friend class QDPCache;
@@ -548,11 +547,6 @@ namespace QDP
   }
 
 
-  template<class Allocator>
-  size_t QDPPoolAllocator<Allocator>::getPoolSize()
-  {
-    return poolSize;
-  }
 
 
 

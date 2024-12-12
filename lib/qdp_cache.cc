@@ -115,6 +115,12 @@ namespace QDP
     return get__cache_pool_allocator().getPoolSize();
   }
 
+  void* QDPCache::getPoolPtr()
+  {
+    return get__cache_pool_allocator().getPoolPtr();
+  }
+
+  
 
   
   std::string QDPCache::stringStatus( Status s )

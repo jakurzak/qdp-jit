@@ -129,6 +129,7 @@ namespace QDP
 
     bool isOnDevice(int id);
 
+    void* getPoolPtr();
     
   private:
     int add_pool( size_t size, Flags flags, Status st, const void* ptr_host, const void* ptr_dev, LayoutFptr func );
