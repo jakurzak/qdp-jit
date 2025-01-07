@@ -17,12 +17,18 @@ namespace QDP
   //----------------------------------------------------------------------------
   //! Iterator for a MapObject
   template<typename K, typename V>
-  class MapObjectMemoryIterator : public std::iterator<std::input_iterator_tag, 
-						 std::unordered_map<std::string, std::pair<K,V> > >
-  {
+  class MapObjectMemoryIterator {
   public:
-    //! Map type convenience
-    typedef std::unordered_map<std::string, std::pair<K,V> > MapType_t;
+
+	  using MapType_t = std::unordered_map<std::string, std::pair<K,V> >;
+
+	  // Compulsory iterator stuff k
+    using iterator_category = std::input_iterator_tag;
+    using value_type = MapType_t;
+    using difference_type = ptrdiff_t;
+    using pointer = MapType_t*;
+    using reference = MapType_t&;
+
 
     //! Take an input iterator coming from MapObject
     MapObjectMemoryIterator(const typename MapType_t::const_iterator& iter_) : src_iter(iter_) {}
