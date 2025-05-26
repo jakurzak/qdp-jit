@@ -97,7 +97,11 @@ target_include_directories( jit PUBLIC
         $<BUILD_INTERFACE:${CMAKE_CURRENT_BINARY_DIR}/../include>
         $<INSTALL_INTERFACE:include> )
 target_include_directories(jit PUBLIC ${LLVM_INCLUDE_DIRS} )
-target_link_libraries( jit PUBLIC ${LLVM_AVAILABLE_LIBS} )
+if( "LLVM" IN_LIST LLVM_AVAILABLE_LIBS )
+	target_link_libraries( jit PUBLIC LLVM )
+else()
+	target_link_libraries( jit PUBLIC ${LLVM_AVAILABLE_LIBS} )
+endif()
 target_link_libraries( jit PUBLIC QMP::qmp)
 
 if( QDP_ENABLE_BACKEND STREQUAL "ROCM" )
