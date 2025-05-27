@@ -1346,6 +1346,14 @@ namespace QDP
     if ( src->getType() == dest_type)
       return src;
 
+    auto i1_type = llvm::Type::getIntNTy(llvm_get_context() , 1 );
+    auto i8_type = llvm::Type::getIntNTy(llvm_get_context() , 8 );
+
+    if ( src->getType() == i1_type && dest_type == i8_type )
+      {
+	return builder->CreateZExt( src , i8_type );
+      }
+
     if ( dest_type->isArrayTy() )
       if ( dest_type->getArrayElementType() == src->getType() )
 	return src;
