@@ -35,10 +35,6 @@ namespace QDP {
   void jit_launch       ( JitFunction& function , int th_count , std::vector<QDPCache::ArgKey>& ids , bool set_l0_event = false );
   void jit_launch_explicit_geom( JitFunction& function , std::vector<QDPCache::ArgKey>& ids , const kernel_geom_t& geom , unsigned int shared );
 
-#ifdef QDP_DEEP_LOG
-  void jit_deep_log(JitFunction& f);
-#endif
-
   void db_tune_write( std::string filename );
   void db_tune_read( std::string filename );
 

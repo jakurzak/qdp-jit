@@ -557,7 +557,7 @@ namespace QDP {
     
 	gpu_memcpy_d2h( host_ptr , dev_ptr , field_size );
 
-	gpu_deep_logger( host_ptr , f.type_W , field_size , f.get_pretty() , f.get_is_lat() );
+	QDPIO::cout << "DEEP_LOG: not yet for ROCM" << std::endl;
 
 	free( host_ptr );
       }

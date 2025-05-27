@@ -37,7 +37,7 @@ namespace QDP {
     jit_launch(function,th_count,ids);
 
 #ifdef QDP_DEEP_LOG
-    jit_deep_log(function);
+    QDP_get_global_logger().log(dest,s);
 #endif
   }
 

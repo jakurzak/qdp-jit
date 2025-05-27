@@ -9,10 +9,6 @@ namespace QDP {
 
   enum class JitResult { JitSuccess , JitError , JitResource };
 
-#ifdef QDP_DEEP_LOG
-  void gpu_deep_logger( void* host_ptr , std::string type_W , size_t field_size , std::string pretty );
-  void gpu_deep_logger_close();
-#endif
 
 #ifdef QDP_BACKEND_CUDA
   int gpu_SDK_version_major();

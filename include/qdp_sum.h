@@ -290,7 +290,7 @@ namespace QDP {
 #endif
 
 #ifdef QDP_DEEP_LOG
-    gpu_deep_logger( d.getF() , typeid(typename WordType<T2>::Type_t).name() , sizeof(T2) , __PRETTY_FUNCTION__ , false );
+    QDP_get_global_logger().log(d);
 #endif
 
     return d;
@@ -329,7 +329,6 @@ namespace QDP {
     QDPInternal::globalSum(sum);
 
 #ifdef QDP_DEEP_LOG
-    gpu_deep_logger( sum.getF() , typeid(typename WordType<T2>::Type_t).name() , sizeof(T2) , __PRETTY_FUNCTION__ , false );
 #endif
 
     return sum;
@@ -534,7 +533,10 @@ namespace QDP {
 #endif
 
 #ifdef QDP_DEEP_LOG
-    gpu_deep_logger( dest.slice() , typeid(typename WordType<T2>::Type_t).name() , sizeof(T2)*numsubsets , __PRETTY_FUNCTION__ , false );
+    for (int i = 0 ; i < numsubsets ; ++i )
+      {
+	QDP_get_global_logger().log(dest[i]);
+      }
 #endif
     
     return dest;
@@ -587,7 +589,6 @@ namespace QDP {
 #endif
 
 #ifdef QDP_DEEP_LOG
-    gpu_deep_logger( dest.slice() , typeid(typename WordType<T2>::Type_t).name() , sizeof(T2) * ss.numSubsets() , __PRETTY_FUNCTION__ , false );
 #endif
 
     return dest;
@@ -679,7 +680,7 @@ namespace QDP {
 #endif
 
 #ifdef QDP_DEEP_LOG
-    gpu_deep_logger( d.getF() , typeid(typename WordType<T>::Type_t).name() , sizeof(T) , __PRETTY_FUNCTION__ , false );
+    QDP_get_global_logger().log(d);
 #endif
     
     return d;
@@ -718,7 +719,6 @@ namespace QDP {
 #endif
 
 #ifdef QDP_DEEP_LOG
-    gpu_deep_logger( d.getF() , typeid(typename WordType<T>::Type_t).name() , sizeof(T) , __PRETTY_FUNCTION__ , false );
 #endif
 
     return d;

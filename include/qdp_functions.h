@@ -239,6 +239,10 @@ namespace QDP {
     fill_random(d.elem(), seed, skewed_seed, RNG::get_RNG_Internals()->ran_mult);
 
     RNG::get_RNG_Internals()->ran_seed = seed;  // The seed from any site is the same as the new global seed
+
+#ifdef QDP_DEEP_LOG
+    QDP_get_global_logger().log(d);
+#endif
   }
 
 

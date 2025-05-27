@@ -107,7 +107,7 @@ namespace QDP {
     QDP_get_global_cache().signoff( seed_tmp_id );
 
 #ifdef QDP_DEEP_LOG
-    jit_deep_log(function);
+    QDP_get_global_logger().log(dest,s);
 #endif
   }
 

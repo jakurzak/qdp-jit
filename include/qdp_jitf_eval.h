@@ -366,7 +366,8 @@ namespace QDP {
       }
 
 #ifdef QDP_DEEP_LOG
-    jit_deep_log(function);
+    //jit_deep_log(function);
+    QDP_get_global_logger().log(dest,s);
 #endif
     
   }

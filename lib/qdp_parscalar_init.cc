@@ -364,12 +364,16 @@ namespace QDP {
 	    char tmp[1024];
 	    sscanf((*argv)[++i], "%s", &tmp[0]);
 	    jit_config_deep_set( tmp , true );
+	    QDP_get_global_logger().setCreate();
+	    QDP_get_global_logger().setName(tmp);
 	  }
 	else if (strcmp((*argv)[i], "-deep-log-compare")==0)
 	  {
 	    char tmp[1024];
 	    sscanf((*argv)[++i], "%s", &tmp[0]);
 	    jit_config_deep_set( tmp , false );
+	    QDP_get_global_logger().setCompare();
+	    QDP_get_global_logger().setName(tmp);
 	  }
 	else if (strcmp((*argv)[i], "-deep-log-tolerance")==0)
 	  {
@@ -693,7 +697,7 @@ namespace QDP {
 	void QDP_finalize()
 	{
 #ifdef QDP_DEEP_LOG
-	  gpu_deep_logger_close();
+	  QDP_get_global_logger().close();
 #endif
 
 		if ( ! QDP_isInitialized() )

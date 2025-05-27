@@ -120,8 +120,10 @@ namespace QDP {
     jit_launch( function , th_count , ids , set_l0_event );
 
 #ifdef QDP_DEEP_LOG
-    jit_deep_log(function);
+    QDPIO::cout << "DEEP LOG: skip gather_exec" << std::endl;
+    //QDP_get_global_logger().log(dest,s);
 #endif
+
   }
 
 } // QDP

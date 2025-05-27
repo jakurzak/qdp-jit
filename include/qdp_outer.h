@@ -115,6 +115,24 @@ namespace QDP {
       this->assign(rhs);
     }
 
+
+    int sizeInWords() const { return sizeof(T)/sizeof(typename WordType<T>::Type_t); }
+    
+    void writeTo(std::ostream& out) const
+    {
+      out.write( (const char*)&F , sizeof(T) );
+    }
+
+    void readFrom(std::istream& in) const
+    {
+      in.read( (char*)&F , sizeof(T) );
+    }
+
+    const typename WordType<T>::Type_t* get_ptr() const
+    {
+      return (const typename WordType<T>::Type_t*)&F;
+    }
+    
     
   public:
 
@@ -246,18 +264,7 @@ inline
 void evaluate(OScalar<T>& dest, const Op& op, const QDPExpr<RHS,OScalar<T1> >& rhs,
 	      const Subset& s)
 {
-  //QDPIO::cout << __PRETTY_FUNCTION__ << "\n";
-  
-  // Subset is not used at this level. It may be needed, though, within an inner operation
   op(dest.elem(), forEach(rhs, ElemLeaf(), OpCombine()));
-
-// #ifdef QDP_DEEP_LOG
-//   if (jit_config_deep_log())
-//     {
-//       gpu_deep_logger( dest.getF() , typeid(typename WordType<T>::Type_t).name() , sizeof(T) , __PRETTY_FUNCTION__ , false );
-//     }
-// #endif
-  
 }
 #endif
 
@@ -428,6 +435,29 @@ void evaluate(OScalar<T>& dest, const Op& op, const QDPExpr<RHS,OScalar<T1> >& r
       return F[i]; 
     }
 
+
+    void writeElemTo(int i, std::ostream& out) const
+    {
+      size_t words_T = sizeof(T) / sizeof( typename WordType<T>::Type_t );
+	    
+      typename WordType<T>::Type_t *f;
+      QDP_get_global_cache().getHostPtr( (void**)&f , myId );
+
+      out.write( (const char*)(f + i * words_T) , sizeof(T) );
+    }
+
+
+    void readElemFrom(int i, std::istream& in) const
+    {
+      size_t words_T = sizeof(T) / sizeof( typename WordType<T>::Type_t );
+      
+      typename WordType<T>::Type_t *f;
+      QDP_get_global_cache().getHostPtr( (void**)&f , myId );
+
+      in.read( (char*)(f + i * words_T) , sizeof(T) );
+    }
+
+    
 
 #if defined (QDP_CODEGEN_VECTOR)
     OScalar< typename ScalarType<T>::Type_t > peekLinearSite(int site) const

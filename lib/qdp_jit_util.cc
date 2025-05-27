@@ -432,33 +432,6 @@ namespace QDP {
 
 
   
-#ifdef QDP_DEEP_LOG
-  void jit_deep_log(JitFunction& f)
-  {
-    if (jit_config_deep_log() && f.get_dest_id() >= 0)
-      {
-	size_t field_size = QDP_get_global_cache().getSize( f.get_dest_id() );
-
-	void* host_ptr;
-
-	if ( ! (host_ptr = malloc( field_size )) )
-	  {
-	    QDPIO::cout << "Cannot allocate host memory!" << endl;
-	    QDP_abort(1);
-	  }
-	    
-        void* dev_ptr = QDP_get_global_cache().get_dev_ptr( f.get_dest_id() );
-
-	gpu_memcpy_d2h( host_ptr , dev_ptr , field_size );
-
-	gpu_deep_logger( host_ptr , f.type_W , field_size , f.get_pretty() , f.get_is_lat() );
-
-	free( host_ptr );
-      }
-  }
-#endif
-
-  
 
 
   
