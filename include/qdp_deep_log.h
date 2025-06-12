@@ -1,6 +1,9 @@
 #ifndef QDP_FILE_DEEP_LOG
 #define QDP_FILE_DEEP_LOG
 
+#include <unistd.h>  // for sleep()
+#include <csignal>   // for raise() and SIGSEGV
+
 namespace QDP {
 
 
