@@ -42,7 +42,7 @@ option(QDP_ENABLE_LLVM15 "Enable changes to compile with LLVM15 release" OFF)
 option(QDP_ENABLE_LLVM16 "Enable changes to compile with LLVM16 release" OFF)
 option(QDP_ENABLE_LLVM17 "Enable changes to compile with LLVM17 release" OFF)
 option(QDP_ENABLE_LLVM18 "Enable changes to compile with LLVM18 release" OFF)
-option(QDP_ENABLE_LLVM18 "Enable changes to compile with LLVM19 release" OFF)
+option(QDP_ENABLE_LLVM19 "Enable changes to compile with LLVM19 release" OFF)
 option(QDP_ENABLE_LLVM20 "Enable changes to compile with LLVM20 pre-release" OFF)
 option(QDP_BUILD_EXAMPLES "Build examples" ON)
 
