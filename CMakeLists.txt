@@ -285,7 +285,7 @@ check_function_exists("gethostname" HAVE_GETHOSTNAME)
 check_function_exists("strnlen" HAVE_STRNLEN)
 
 if( QDP_ENABLE_LLVM20 )
-  find_package(LLVM "20.0" REQUIRED CONFIG)
+  find_package(LLVM "20.1" REQUIRED CONFIG)
 elseif( QDP_ENABLE_LLVM19 )
   find_package(LLVM "19.0" REQUIRED CONFIG)
 elseif( QDP_ENABLE_LLVM18 )
