@@ -394,7 +394,11 @@ namespace QDP {
     
     if (ret != CUDA_SUCCESS || cuContext == NULL)
     {
+#if (CUDA_VERSION >= 13000)
+      ret = cuCtxCreate(&cuContext, NULL, CU_CTX_MAP_HOST, cuDevice);
+#else
       ret = cuCtxCreate(&cuContext, CU_CTX_MAP_HOST, cuDevice);
+#endif
     }
     CudaRes(__func__,ret);
 #endif
@@ -421,6 +425,15 @@ namespace QDP {
     
     major = ma;
     minor = mi;
+
+    // hack to allow overrding gpu arch passed to llvmset
+    char *qdpjit_cuda_arch = getenv("QDPJIT_ARCH");
+    if (qdpjit_cuda_arch) {
+      int arch = atoi(qdpjit_cuda_arch);
+      major = arch/10;
+      minor = arch%10;
+      QDPIO::cout << "Overriding Compute capability for JIT: " << qdpjit_cuda_arch << "\n";
+    }
     
     QDPIO::cout << "  Compute capability (major,minor)    : " << major << "," << minor << "\n";
     QDPIO::cout << "  Shared memory                       : " << smem/1024  << " KB\n";
