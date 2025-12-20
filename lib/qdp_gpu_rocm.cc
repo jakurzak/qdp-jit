@@ -58,6 +58,7 @@ namespace QDP {
   }
 
   void gpu_auto_detect();
+  void CheckError(const std::string& s,hipError_t ret);
 
 
 #ifdef QDP_USE_ROCM_STATS
@@ -432,6 +433,7 @@ namespace QDP {
 
   void gpu_create_events()
   {
+    CheckError("hipSetDevice", hipSetDevice(deviceId));
     hipError_t res = hipEventCreate ( &evStart );
     if (res != hipSuccess)
       {
@@ -448,6 +450,7 @@ namespace QDP {
 
   void gpu_record_start()
   {
+    CheckError("hipSetDevice", hipSetDevice(deviceId));
     hipError_t res = hipEventRecord ( evStart , NULL );
     if (res != hipSuccess)
       {
@@ -460,6 +463,7 @@ namespace QDP {
   
   float gpu_record_stop_sync_time()
   {
+    CheckError("hipSetDevice", hipSetDevice(deviceId));
     //stop
     hipError_t res = hipEventRecord ( evStop, NULL );
     if (res != hipSuccess)
@@ -515,6 +519,7 @@ namespace QDP {
       }
 #endif
 
+    CheckError("hipSetDevice", hipSetDevice(deviceId));
     hipError_t res = hipModuleLaunchKernel((hipFunction_t)f.get_function(),  
 					   gridDimX, gridDimY, gridDimZ, 
 					   blockDimX, blockDimY, blockDimZ, 
@@ -662,8 +667,9 @@ namespace QDP {
   {
     hipError_t ret;
 
+    deviceId = dev;
     ret = hipSetDevice(dev);
-    CheckError("hitSetDevice",ret);
+    CheckError("hitSetDevice", ret);
 
     gpu_create_events();
 
@@ -739,6 +745,7 @@ namespace QDP {
   void gpu_host_alloc(void **mem , const size_t size)
   {
     hipError_t ret;
+    CheckError("hipSetDevice", hipSetDevice(deviceId));
     ret = hipHostMalloc ( mem , size , 0 );
     CheckError("hipHostMalloc",ret);
   }
@@ -752,6 +759,7 @@ namespace QDP {
 	return;
       }
     hipError_t ret;
+    CheckError("hipSetDevice", hipSetDevice(deviceId));
     ret = hipHostFree ( mem );
     CheckError("hipHostFree",ret);
   }
@@ -763,6 +771,7 @@ namespace QDP {
   void gpu_memcpy_h2d( void * dest , const void * src , size_t size )
   {
     hipError_t ret;
+    CheckError("hipSetDevice", hipSetDevice(deviceId));
     ret = hipMemcpyHtoD( (hipDeviceptr_t)const_cast<void*>(dest) , (void*)src , size );
     CheckError("hipMemcpyHtoD",ret);
   }
@@ -770,6 +779,7 @@ namespace QDP {
   void gpu_memcpy_d2h( void * dest , const void * src , size_t size )
   {
     hipError_t ret;
+    CheckError("hipSetDevice", hipSetDevice(deviceId));
     ret = hipMemcpyDtoH( dest , (hipDeviceptr_t)const_cast<void*>(src) , size );
     CheckError("hipMemcpyDtoH",ret);
   }
@@ -778,6 +788,7 @@ namespace QDP {
   bool gpu_malloc(void **mem , size_t size )
   {
     hipError_t ret;
+    CheckError("hipSetDevice", hipSetDevice(deviceId));
     ret = hipMalloc ( mem , size);
     return ret == hipSuccess;
   }
@@ -790,6 +801,7 @@ namespace QDP {
 	return;
       }
     hipError_t ret;
+    CheckError("hipSetDevice", hipSetDevice(deviceId));
     ret = hipFree( (void*)mem );
     CheckError("hipFree",ret);
   }
@@ -799,6 +811,7 @@ namespace QDP {
   void gpu_memset( void * dest , unsigned char val , size_t N )
   {
     hipError_t ret;
+    CheckError("hipSetDevice", hipSetDevice(deviceId));
     ret = hipMemsetD8( dest , val , N );
     CheckError("hipMemset",ret);
   }
@@ -826,6 +839,7 @@ namespace QDP {
     func.set_kernel_name( kernel_name );
     func.set_pretty( pretty );
 
+    CheckError("hipSetDevice", hipSetDevice(deviceId));
     ret = hipModuleLoadData(&module, shared.data() );
     if (ret != hipSuccess)
       {
@@ -857,6 +871,7 @@ namespace QDP {
   void gpu_sync()
   {
     hipError_t ret;
+    CheckError("hipSetDevice", hipSetDevice(deviceId));
     ret = hipStreamSynchronize(NULL);
     
     if (ret != hipSuccess)
