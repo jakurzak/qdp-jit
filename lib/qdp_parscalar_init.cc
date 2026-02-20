@@ -7,15 +7,14 @@
 
 #include <stdlib.h>
 #include <unistd.h>
+#include <numeric>
+//#include <iomanip>
 
 #include "qdp.h"
 #include "qmp.h"
 
-#if defined(QDP_USE_QMT_THREADS)
-#include <qmt.h>
-#endif
-
 #include "qdp_init.h"
+#include <sys/stat.h> // Wanna use <filesystem> but not there...
 
 #if defined(QDP_USE_COMM_SPLIT_INIT)
 #include <mpi.h>
@@ -23,122 +22,91 @@
 
 namespace QDP {
 
-namespace COUNT {
-  int count = 0;
-}
-	
-	namespace ThreadReductions {
-		REAL64* norm2_results;
-		REAL64* innerProd_results;
-	}
+  namespace Layout {
+    // Destroy lattice coordinate
+    void destroyLatticeCoordinate();
+  }
 
   //! Private flag for status
   static bool isInit = false;
-  bool setPoolSize = false;
   bool setGeomP = false;
   bool setIOGeomP = false;
   multi1d<int> logical_geom(Nd);   // apriori logical geometry of the machine
   multi1d<int> logical_iogeom(Nd); // apriori logical 	
+  
 
-
-#if 1
-  int gamma_degrand_rossi[5][4][4][2] = 
-    { { {{0,0}, {0,0}, {0,0},{0,-1}},
-	{{0,0}, {0,0}, {0,-1},{0,0}},
-	{{0,0}, {0,1},{0,0},{0,0}},
-	{{0,1},{0,0}, {0,0},{0,0}} },
-
-      { {{0,0}, {0,0}, {0,0},{-1,0}},
-	{{0,0}, {0,0}, {1,0},{0,0}},
-	{{0,0}, {1,0}, {0,0},{0,0}},
-	{{-1,0},{0,0}, {0,0},{0,0}} },
-
-      { {{0,0}, {0,0}, {0,-1},{0,0}},
-	{{0,0}, {0,0}, {0,0},{0,1}},
-	{{0,1}, {0,0}, {0,0},{0,0}},
-	{{0,0}, {0,-1}, {0,0},{0,0}} },
-
-      { {{0,0}, {0,0}, {1,0},{0,0}},
-	{{0,0}, {0,0}, {0,0},{1,0}},
-	{{1,0}, {0,0}, {0,0},{0,0}},
-	{{0,0}, {1,0}, {0,0},{0,0}} },
-
-      { {{1,0}, {0,0}, {0,0},{0,0}},
-	{{0,0}, {1,0}, {0,0},{0,0}},
-	{{0,0}, {0,0}, {1,0},{0,0}},
-	{{0,0}, {0,0}, {0,0},{1,0}} } };
-
-
-
-  SpinMatrix QDP_Gamma_values[Ns*Ns];
-
-  extern SpinMatrix& Gamma(int i) {
-    if (i<0 || i>15)
-      QDP_error_exit("Gamma(%d) value out of range",i);
-    if (!isInit) {
-      std::cerr << "Gamma() used before QDP_init\n";
-      exit(1);
-    }
-    //QDP_info("++++ returning gammas[%d]",i);
-    //std::cout << gammas[i] << "\n";
-    return QDP_Gamma_values[i];
-  }
-#endif
-
-  //! Public flag for using the GPU or not
-  bool QDPuseGPU = false;
+  
 
   void QDP_startGPU()
   {
-    QDP_info_primary("Getting GPU device properties");
-    CudaGetDeviceProps();
+    // print the delayed messages
+    jit_config_print_delayed_message();
 
-    QDP_info_primary("Trigger GPU evaluation");
-    QDPuseGPU=true;
+    // Getting GPU device properties
+    //gpu_auto_detect();
+
+    // Set the pool size
+    QDP_get_global_cache().setPoolSize( jit_config_get_pool_size() );
     
-    CudaCreateStreams();
-
     // Initialize the LLVM wrapper
-    llvm_wrapper_init();
+    llvm_backend_init();
+
+    if (jit_config_get_tuning())
+      {
+	db_tune_read( jit_config_get_tuning_file() );
+      }
   }
 
 
   //! Set the GPU device
   int QDP_setGPU()
   {
-    int deviceCount;
-    //int ret = 0;
-    CudaGetDeviceCount(&deviceCount);
-    if (deviceCount == 0) {
-      QDP_error_exit("No CUDA devices found");
-    }
-
-    // Try MVapich fist
-    char *rank = getenv( "MV2_COMM_WORLD_LOCAL_RANK"  );
-
-    // Try OpenMPI
-    if( ! rank ) {
-       rank = getenv( "OMPI_COMM_WORLD_LOCAL_RANK" );
-    } 
-
+    int deviceCount = gpu_get_device_count();
     int dev=0;
-    if (rank) {
-      int local_rank = atoi(rank);
-      dev = local_rank % deviceCount;
-    } else {
-      std::cerr << "Couldnt determine local rank. Selecting device 0. In a multi-GPU per node run this is not what one wants.\n";
-      dev = 0;
-#if 0
-      // we don't have an initialized QMP at this point
-       std::cerr << "Couldnt determine local rank. Selecting device based on global rank \n";
-       std::cerr << "Please ensure that ranks increase fastest within the node for this to work \n";
-       int rank_QMP = QMP_get_node_number();
-       dev = rank_QMP % deviceCount;
-#endif
-    }
+    
+    if (qdp_jit_config_get_use_gpu() == -1)
+      {
+	// Try 
+	char *rank = getenv( "PMI_RANK" );
 
-    std::cout << "Setting CUDA device to " << dev << "\n";
-    CudaSetDevice( dev );
+	// Try MVapich
+	if( ! rank ) {
+	  rank = getenv( "MV2_COMM_WORLD_LOCAL_RANK"  );
+	} 
+
+	// Try OpenMPI
+	if( ! rank ) {
+	  rank = getenv( "OMPI_COMM_WORLD_LOCAL_RANK" );
+	}
+
+	// Try SLURM
+	if( ! rank ) {
+	  rank = getenv( "SLURM_LOCALID" );
+	}
+
+	if (rank)
+	  {
+	    int local_rank = atoi(rank);
+	    dev = local_rank % deviceCount;
+	  }
+	else
+	  {
+	    jit_config_delayed_message("Couldnt determine local rank. Selecting device 0. In a multi-GPU per node run this is not what one wants.");
+	    dev = 0;
+	  }
+      }
+    else
+      {
+	dev = qdp_jit_config_get_use_gpu();
+	jit_config_delayed_message("Selecting device " + std::to_string(dev) + " as per user request.");
+      }
+
+    //std::cout << "Setting GPU device to " << dev << "\n";
+    gpu_set_device( dev );
+
+    // Sync init
+    jit_util_sync_init();
+    
     return dev;
   }
 
@@ -167,7 +135,7 @@ namespace COUNT {
 
     printf("Global Rank: %d of %d Host: %s  Local Rank: %d of %d Setting CUDA Device to %d \n",
         rank_global, np_global, hostname, rank_local, np_local, rank_local);
-    CudaSetDevice(rank_local);
+    gpu_set_device(rank_local);
     return rank_local;
  
   }
@@ -198,55 +166,20 @@ namespace COUNT {
 
     if (isInit)
       {
-	QDPIO::cerr << "QDP already inited" << endl;
+	std::cerr << "QDP already initialized" << endl;
 	QDP_abort(1);
       }
 
-#if 1
-    //QDP_info_primary("Setting gamma matrices");
+    // initialize the global streams
+    QDPIO::cin.init(&std::cin);
+    QDPIO::cout.init(&std::cout);
+    QDPIO::cerr.init(&std::cerr);
+    
+    //
+    // Init CUDA
+    //
+    gpu_init();
 
-    SpinMatrix dgr[5];
-    for (int i=0;i<5;i++) {
-      for (int s=0;s<4;s++) {
-	for (int s2=0;s2<4;s2++) {
-	  dgr[i].elem().elem(s,s2).elem().real() = (float)gamma_degrand_rossi[i][s2][s][0];
-	  dgr[i].elem().elem(s,s2).elem().imag() = (float)gamma_degrand_rossi[i][s2][s][1];
-	}
-      }
-      //std::cout << i << "\n" << dgr[i] << "\n";
-    }
-    //QDP_info_primary("Finished setting gamma matrices");
-    //QDP_info_primary("Multiplying gamma matrices");
-
-    QDP_Gamma_values[0]=dgr[4]; // Unity
-    for (int i=1;i<16;i++) {
-      zero_rep(QDP_Gamma_values[i]);
-      bool first=true;
-      //std::cout << "gamma value " << i << " ";
-      for (int q=0;q<4;q++) {
-	if (i&(1<<q)) {
-	  //std::cout << q << " ";
-	  if (first)
-	    QDP_Gamma_values[i]=dgr[q];
-	  else
-	    QDP_Gamma_values[i]=QDP_Gamma_values[i]*dgr[q];
-	  first = false;
-	}
-      }
-      //std::cout << "\n" << QDP_Gamma_values[i] << "\n";
-		  
-    }
-    //QDP_info_primary("Finished multiplying gamma matrices");
-#endif
-
-    CudaInit();
-
-    // This defaults to mvapich2
-#if 0
-    // This is deprecated - direct envvars try several variables
-    DeviceParams::Instance().setENVVAR("MV2_COMM_WORLD_LOCAL_RANK");
-#endif 
-		
     //
     // Process command line
     //
@@ -258,7 +191,10 @@ namespace COUNT {
 	if (strcmp((*argv)[i], "-h")==0)
 	  help_flag = true;
       }
-		
+
+    bool libdevice_path_set = false;
+    bool libdevice_name_set = false;
+
     setGeomP = false;
     logical_geom = 0;
 		
@@ -323,26 +259,7 @@ namespace COUNT {
 	    setProgramProfileLevel(lev);
 	  }
 #endif
-	else if (strcmp((*argv)[i], "-sync")==0) 
-	  {
-	    DeviceParams::Instance().setSyncDevice(true);
-	  }
-	else if (strcmp((*argv)[i], "-sm")==0) 
-	  {
-	    int sm;
-	    sscanf((*argv)[++i], "%d", &sm);
-	    DeviceParams::Instance().setSM(sm);
-	  }
-	else if (strcmp((*argv)[i], "-gpudirect")==0) 
-	  {
-	    DeviceParams::Instance().setGPUDirect(true);
-	  }
-	else if (strcmp((*argv)[i], "-envvar")==0) 
-	  {
-	    char buffer[1024];
-	    sscanf((*argv)[++i],"%s",&buffer[0]);
-	    DeviceParams::Instance().setENVVAR(buffer);
-	  }
+#if ! defined (QDP_ENABLE_MANAGED_MEMORY)
 	else if (strcmp((*argv)[i], "-poolsize")==0) 
 	  {
 	    float f;
@@ -368,24 +285,259 @@ namespace COUNT {
 	      QDP_error_exit("unknown multiplication factor");
 	    }
 	    size_t val = (size_t)((double)(f) * mul);
-
-	    //CUDADevicePoolAllocator::Instance().setPoolSize(val);
-	    QDP_get_global_cache().get_allocator().setPoolSize(val);
+	    jit_config_set_pool_size(val);
+	  }
+	else if (strcmp((*argv)[i], "-poolmemset")==0) 
+	  {
+	    unsigned val;
+	    sscanf((*argv)[++i],"%u",&val);
+	    QDP_get_global_cache().enableMemset(val);
+	  }
+	else if (strcmp((*argv)[i], "-pool-max-alloc")==0) 
+	  {
+	    int val;
+	    sscanf((*argv)[++i],"%d",&val);
+	    jit_config_set_max_allocation( val );
+	  }
+	else if (strcmp((*argv)[i], "-pool-alignment")==0) 
+	  {
+	    unsigned val;
+	    sscanf((*argv)[++i],"%u",&val);
+	    jit_config_set_pool_alignment( val );
+	  }
+	else if (strcmp((*argv)[i], "-pool-stats")==0) 
+	  {
+	    jit_set_config_pool_stats();
+	  }
+#endif
+	else if (strcmp((*argv)[i], "-blocksize")==0)
+	  {
+	    unsigned val;
+	    sscanf((*argv)[++i],"%u",&val);
+	    jit_config_set_threads_per_block( val );
+	  }
+	else if (strcmp((*argv)[i], "-stats")==0) 
+	  {
+	    gpu_set_record_stats();
+	  }
+	else if (strcmp((*argv)[i], "-tune")==0) 
+	  {
+	    jit_config_set_tuning(true);
+	  }
+	else if (strcmp((*argv)[i], "-timing-run")==0) 
+	  {
+	    jit_config_set_timing_run(true);
+	  }
+	else if (strcmp((*argv)[i], "-tuneverbose")==0) 
+	  {
+	    jit_config_set_tuning(true);
+	    jit_config_set_tuning_verbose(true);
+	  }
+	else if (strcmp((*argv)[i], "-tuneconfig")==0) 
+	  {
+	    int min,max,step,loops;
+	    sscanf( (*argv)[++i], "%d", &min );
+	    sscanf( (*argv)[++i], "%d", &max );
+	    sscanf( (*argv)[++i], "%d", &step );
+	    sscanf( (*argv)[++i], "%d", &loops );
 	    
-	    setPoolSize = true;
+	    jit_config_set_threads_per_block_min( min );
+	    jit_config_set_threads_per_block_max( max );
+	    jit_config_set_threads_per_block_step( step );
+	    jit_config_set_threads_per_block_loops( loops );
+
+	    jit_config_set_tuning(true);
 	  }
-	else if (strcmp((*argv)[i], "-llvm-opt")==0) 
+	else if (strcmp((*argv)[i], "-clang-codegen")==0) 
+	  {
+	    llvm_set_clang_codegen();
+	  }
+	else if (strcmp((*argv)[i], "-clang-opt")==0)
 	  {
 	    char tmp[1024];
 	    sscanf((*argv)[++i], "%s", &tmp[0]);
-	    llvm_set_opt(tmp);
+	    llvm_set_clang_opt(tmp);
 	  }
-	else if (strcmp((*argv)[i], "-ptxdb")==0) 
+#ifdef QDP_DEEP_LOG
+	else if (strcmp((*argv)[i], "-deep-log-create")==0)
 	  {
 	    char tmp[1024];
 	    sscanf((*argv)[++i], "%s", &tmp[0]);
-	    llvm_set_ptxdb(tmp);
+	    jit_config_deep_set( tmp , true );
+	    QDP_get_global_logger().setCreate();
+	    QDP_get_global_logger().setName(tmp);
 	  }
+	else if (strcmp((*argv)[i], "-deep-log-compare")==0)
+	  {
+	    char tmp[1024];
+	    sscanf((*argv)[++i], "%s", &tmp[0]);
+	    jit_config_deep_set( tmp , false );
+	    QDP_get_global_logger().setCompare();
+	    QDP_get_global_logger().setName(tmp);
+	  }
+	else if (strcmp((*argv)[i], "-deep-log-tolerance")==0)
+	  {
+	    double d;
+	    sscanf((*argv)[++i], "%lf", &d);
+	    jit_config_set_tolerance(d);
+	  }
+	else if (strcmp((*argv)[i], "-deep-log-fuzzfactor")==0)
+	  {
+	    double d;
+	    sscanf((*argv)[++i], "%lf", &d);
+	    jit_config_set_fuzzfactor(d);
+	  }
+	else if (strcmp((*argv)[i], "-deep-log-events")==0)
+	  {
+	    unsigned val;
+	    sscanf((*argv)[++i],"%u",&val);
+	    jit_config_set_log_events( val );
+	  }
+#endif
+#ifdef QDP_BACKEND_ROCM
+	else if (strcmp((*argv)[i], "-temp-files-path")==0) { 
+	  char tmp[2048];
+	  sscanf((*argv)[++i], "%s", &tmp[0]);
+	  std::string stmp(tmp);
+	  if ( stmp.front() == '-' ) {
+	    // argument missing
+	    QDPIO::cerr << __func__ << ": -temp-files-path: " << stmp << " starts with - \n";
+	    QDP_abort(1);
+	  }
+	  if ( stmp.back() != '/' ) { 
+	    stmp += "/";
+	  }
+	  // Check prepend path exists and is a directory
+	  struct stat status;
+	  char hostname[128];
+	  gethostname(hostname, 128);
+ 
+	  if(  stat( stmp.c_str(), &status ) != 0 ) {
+	    std::cerr << hostname<<  __func__ << ": -temp-files-path: " <<  stmp << " is an invalid path...";
+	    switch(errno) { 
+	    case EACCES : 
+	      {
+		std::cerr << " search permition is denied for a component of the path \n";
+		break;
+	      }
+	    case ENOTDIR :
+	      {
+		std::cerr << " a component of the path is not a directory \n";
+		break;
+	      }
+	    default: 
+	      std::cerr << " " << strerror(errno) << "\n";
+	      break;
+	    }
+	    QDP_abort(1);
+	  }
+	  if( (status.st_mode & S_IFMT) != S_IFDIR ) {
+	    std::cerr << hostname << __func__ << ": -temp-files-path: " << stmp << " is not a directory...\n";
+	    QDP_abort(1);
+	  }
+	  jit_config_set_prepend_path(stmp); 				
+	}
+	else if (strcmp((*argv)[i], "-opt")==0)
+	  {
+	    unsigned val;
+	    sscanf((*argv)[++i],"%u",&val);
+	    jit_config_set_codegen_opt( val );
+	  }
+	else if (strcmp((*argv)[i], "-libdevice-extra")==0) 
+	  {
+	    char tmp[2048];
+	    sscanf((*argv)[++i], "%s", &tmp[0]);
+	    jit_config_add_extra_lib(tmp);
+	  }
+#endif
+#if defined(QDP_BACKEND_ROCM) || (QDP_BACKEND_L0)	
+	else if (strcmp((*argv)[i], "-keep-files")==0) 
+	  {
+	    jit_config_set_keepfiles(true);
+	  }
+#endif
+#ifdef QDP_BACKEND_CUDA
+	else if (strcmp((*argv)[i], "-cuda-ftz")==0)
+	  {
+	    unsigned val;
+	    sscanf((*argv)[++i],"%u",&val);
+	    jit_config_set_CUDA_FTZ( val );
+	  }
+#endif
+	else if (strcmp((*argv)[i], "-opt-inline")==0) 
+	  {
+	    int active;
+	    sscanf((*argv)[++i], "%d", &active);
+	    jit_config_set_inline( active != 0 );
+	  }
+	else if (strcmp((*argv)[i], "-opt-instcombine")==0) 
+	  {
+	    int active;
+	    sscanf((*argv)[++i], "%d", &active);
+	    jit_config_set_instcombine( active != 0 );
+	  }
+	else if (strcmp((*argv)[i], "-gpudirect")==0) 
+	  {
+	    jit_config_set_gpu_direct(true);
+	  }
+	else if (strcmp((*argv)[i], "-opt-shift")==0) 
+	  {
+	    qdp_jit_config_set_opt_shifts(true); 
+	  }
+	else if (strcmp((*argv)[i], "-threadstack")==0)
+	  {
+	    int stack;
+	    sscanf((*argv)[++i], "%d", &stack);
+	    jit_config_set_thread_stack(stack);
+	  }
+	else if (strcmp((*argv)[i], "-ringbuffersize")==0)
+	  {
+	    int s;
+	    sscanf((*argv)[++i], "%d", &s);
+	    jit_config_set_oscalar_ringbuffer_size(s);
+	  }
+	else if (strcmp((*argv)[i], "-libdevice-path")==0) 
+	  {
+	    char tmp[1024];
+	    sscanf((*argv)[++i], "%s", &tmp[0]);
+	    llvm_set_libdevice_path(tmp);
+	    libdevice_path_set = true;
+	  }
+	else if (strcmp((*argv)[i], "-libdevice-name")==0) 
+	  {
+	    char tmp[1024];
+	    sscanf((*argv)[++i], "%s", &tmp[0]);
+	    llvm_set_libdevice_name(tmp);
+	    libdevice_name_set = true;
+	  }
+	else if (strcmp((*argv)[i], "-cache-verbose")==0) 
+	  {
+	    qdp_cache_set_cache_verbose(true);
+	  }
+	else if (strcmp((*argv)[i], "-codegen-verbose")==0) 
+	  {
+	    jit_config_set_verbose_output(true);
+	  }
+	else if (strcmp((*argv)[i], "-use-gpu")==0) 
+	  {
+	    int ngpu;
+	    sscanf((*argv)[++i], "%d", &ngpu);
+	    std::cout << "usegpu " << ngpu << "\n";
+	    qdp_jit_config_set_use_gpu(ngpu);
+	  }
+#if QDP_USE_VNODE_LAYOUT == 1
+	else if (strcmp((*argv)[i], "-vnodegeom")==0) 
+	  {
+	    multi1d<int> nrow(Nd);
+	    for(int j=0; j < Nd; j++) 
+	      {
+		int uu;
+		sscanf((*argv)[++i], "%d", &uu);
+		nrow[j] = uu;
+	      }
+	    Layout::setVirtualNodeGeom(nrow);
+	  }
+#endif
 	else if (strcmp((*argv)[i], "-geom")==0) 
 	  {
 	    setGeomP = true;
@@ -437,18 +589,29 @@ namespace COUNT {
 			
 	if (i >= *argc) 
 	  {
-	    QDPIO::cerr << __func__ << ": missing argument at the end" << endl;
+	    std::cerr << __func__ << ": missing argument at the end" << endl;
 	    QDP_abort(1);
 	  }
       }
-		
 
-    if (!setPoolSize) {
-      // It'll be set later in CudaGetDeviceProps
-      //QDP_error_exit("Run-time argument -poolsize <size> missing. Please consult README.");
-    }
-
-		
+#if 0
+#ifdef QDP_BACKEND_ROCM
+    if (!libdevice_path_set)
+      {
+	std::string tmp_path = std::string(QDPJIT_INSTALL_DIR) + jit_config_get_libdevice_path();
+	llvm_set_libdevice_path( tmp_path.c_str() );
+	jit_config_delayed_message("ROCm: libdevice path set to: " + tmp_path);
+      }
+    if (!libdevice_name_set)
+      {
+	std::string tmp_name = jit_config_get_libdevice_name();
+	llvm_set_libdevice_name( tmp_name.c_str() );
+	jit_config_delayed_message("ROCm: libdevice name set to: " + tmp_name);
+      }
+#endif
+#endif
+    
+    //QDPIO::cout << "Not setting QMP verbosity level\n";
     QMP_verbose (QMP_verboseP);
 		
 #if QDP_DEBUG >= 1
@@ -456,8 +619,8 @@ namespace COUNT {
     for (int i=0; i<*argc; i++) 
       QDP_info("QDP_init: arg[%d] = XX%sXX",i,(*argv)[i]);
 #endif
-		
-  }
+    
+  } // QDP_initCUDA
 
 
 
@@ -518,61 +681,11 @@ namespace COUNT {
 	    Layout::setIONodeGrid(logical_iogeom);
 			
 	  }
-	  //
-	  // add qmt inilisisation
-	  //
-#ifdef QDP_USE_QMT_THREADS
-		
-	  // Initialize threads
-	  if( Layout::primaryNode() ) { 
-	    cout << "QDP use qmt threading: Initializing threads..." ;
-	  } 
-	  int thread_status = qmt_init();
-		
-	  if( thread_status == 0 ) { 
-	    if (  Layout::primaryNode() ) { 
-	      cout << "Success. We have " << qdpNumThreads() << " threads \n";
-	    } 
-	  }
-	  else { 
-	    cout << "Failure... qmt_init() returned " << thread_status << endl;
-	    QDP_abort(1);
-	  }
-		
-#else
-#ifdef QDP_USE_OMP_THREADS
-		
-	  if( Layout::primaryNode()) {
-	    cout << "QDP use OpenMP threading. We have " << qdpNumThreads() << " threads\n"; 
-	  }
-		
-#endif
-#endif
-		
-	  // Alloc space for reductions
-	  ThreadReductions::norm2_results = new REAL64 [ qdpNumThreads() ];
-	  if( ThreadReductions::norm2_results == 0x0 ) { 
-	    cout << "Failure... space for norm2 results failed "  << endl;
-	    QDP_abort(1);
-	  }
-		
-	  ThreadReductions::innerProd_results = new REAL64 [ 2*qdpNumThreads() ];
-	  if( ThreadReductions::innerProd_results == 0x0 ) { 
-	    cout << "Failure... space for innerProd results failed "  << endl;
-	    QDP_abort(1);
-	  }
 
-	  // Initialize the LLVM wrapper
-	  //llvm_wrapper_init();
-		
-	  // initialize the global streams
-	  QDPIO::cin.init(&std::cin);
-	  QDPIO::cout.init(&std::cout);
-	  QDPIO::cerr.init(&std::cerr);
-		
 	  initProfile(__FILE__, __func__, __LINE__);
 		
 	  QDPIO::cout << "Initialize done" << std::endl;
+
 	}
 
 
@@ -583,47 +696,249 @@ namespace COUNT {
 	//! Turn off the machine
 	void QDP_finalize()
 	{
+#ifdef QDP_DEEP_LOG
+	  QDP_get_global_logger().close();
+#endif
+
 		if ( ! QDP_isInitialized() )
 		{
 			QDPIO::cerr << "QDP is not inited" << std::endl;
 			QDP_abort(1);
 		}
+
+
+		// Wait for all tasks on the GPU to finish
+		gpu_sync();
+
+		// Destroy lattice coordinates helpers
+		Layout::destroyLatticeCoordinate();
+
+		// Close RNG
+		RNG::doneDefaultRNG();
 		
-		QDPIO::cout << "------------------\n";
-		QDPIO::cout << "-- JIT statistics:\n";
-		QDPIO::cout << "------------------\n";
-		QDPIO::cout << "lattices changed to device layout:     " << get_jit_stats_lattice2dev() << "\n";
-		QDPIO::cout << "lattices changed to host layout:       " << get_jit_stats_lattice2host() << "\n";
-		QDPIO::cout << "functions jit-compiled:                " << get_jit_stats_jitted() << "\n";
-		if (get_ptx_db_enabled())
+		
+		// Finalize ring buffer
+		//
+		QDP_get_global_ring_buffer().done();
+
+
+#if defined (QDP_ENABLE_MANAGED_MEMORY)
+		QDP_get_global_alloc_cache().freeAllUnused();
+#endif
+
+		gpu_done();
+		
+		QDPIO::cout << "\n";
+		QDPIO::cout << "        ------------------------\n";
+		QDPIO::cout << "        -- qdp-jit statistics --\n";
+		QDPIO::cout << "        ------------------------\n";
+		QDPIO::cout << "\n";
+		QDPIO::cout << "Memory cache \n";
+		QDPIO::cout << "  lattice objects copied to host memory:   " << get_jit_stats_lattice2dev() << "\n";
+		QDPIO::cout << "  lattice objects copied to device memory: " << get_jit_stats_lattice2host() << "\n";
+		QDPIO::cout << "\n";
+#if ! defined (QDP_ENABLE_MANAGED_MEMORY)
+		QDPIO::cout << "Pool allocator \n";
+		QDPIO::cout << "  peak memory usage:                       " << QDP_get_global_cache().get_max_allocated() << "\n";
+		if (jit_config_pool_stats())
 		  {
-		    QDPIO::cout << "PTX DB, file:                          " << get_ptx_db_fname() << "\n";
-		    QDPIO::cout << "PTX DB, size (number of functions):    " << get_ptx_db_size() << "\n";
+		    QDPIO::cout << "  memory allocation count: \n";
+		    auto& count = QDP_get_global_cache().get_alloc_count();
+		    for ( auto i = count.begin() ; i != count.end() ; ++i )
+		      {
+			QDPIO::cout << "  " << i->first << " bytes \t\t" << i->second << std::endl;
+		      }
+		    QDPIO::cout << "\n";
 		  }
-		else
+#endif
+		QDPIO::cout << "Code generator \n";
+		QDPIO::cout << "  functions jit-compiled:                  " << get_jit_stats_jitted() << "\n";
+
+		{
+		  std::vector<JitFunction*>& all = gpu_get_functions();
+		  double time_builder = 0.;
+		  double time_math = 0.;
+		  double time_passes = 0.;
+		  double time_codegen = 0.;
+		  double time_dynload = 0.;
+#ifdef QDP_BACKEND_ROCM
+		  double time_linking = 0.;
+#endif
+		  for ( int i = 0 ; i < all.size() ; ++i )
+		    {
+		      time_builder += all.at(i)->time_builder;
+		      time_math    += all.at(i)->time_math;
+		      time_passes  += all.at(i)->time_passes;
+		      time_codegen += all.at(i)->time_codegen;
+		      time_dynload += all.at(i)->time_dynload;
+#ifdef QDP_BACKEND_ROCM
+		      time_linking += all.at(i)->time_linking;
+#endif
+		    }
+		  QDPIO::cout << "  total time for IR builder:               " << time_builder/1.e6 << " s\n";
+		  QDPIO::cout << "  total time for libm IR linking:          " << time_math/1.e6 << " s\n";
+		  QDPIO::cout << "  total time for IR passes:                " << time_passes/1.e6 << " s\n";
+		  QDPIO::cout << "  total time for code generation:          " << time_codegen/1.e6 << " s\n";
+#ifdef QDP_BACKEND_ROCM
+		  QDPIO::cout << "  total time for linking:                  " << time_linking/1.e6 << " s\n";
+#endif
+		  QDPIO::cout << "  total time for dynamic loading:          " << time_dynload/1.e6 << " s\n";
+		}
+
+#ifdef QDP_CUDA_SPECIAL
+		for ( auto it = get_jit_stats_special_names().begin() ; it != get_jit_stats_special_names().end(); it++ )
 		  {
-		    QDPIO::cout << "PTX DB: (not used)\n";
+		    QDPIO::cout << it->first << ": [" << it->second << "] = " << get_jit_stats_special( it->first ) << "\n";
 		  }
+#endif
+		if ( gpu_get_record_stats() )
+		  {
+		    QDPIO::cout << "#" << "\t";
+		    QDPIO::cout << "calls" << "\t";
+#ifdef QDP_USE_ROCM_STATS
+		    QDPIO::cout << "sgpr" << "\t";
+		    QDPIO::cout << "vgpr" << "\t";
+		    QDPIO::cout << "sgpr_sp" << "\t";
+		    QDPIO::cout << "vgpr_sp" << "\t";
+		    QDPIO::cout << "privseg" << "\t";
+		    QDPIO::cout << "grpseg" << "\t";
+#else
+		    QDPIO::cout << "stack" << "\t";
+		    QDPIO::cout << "regs" << "\t";
+		    QDPIO::cout << "cmem" << "\t";
+#endif
+		    QDPIO::cout << "sum(ms)" << "\t\t";
+		    QDPIO::cout << "mean" << "\t\t";
+		    QDPIO::cout << "stddev" << "\t\t";
+		    QDPIO::cout << "name" << "\n";
+		    
+		    std::vector<JitFunction*>& all = gpu_get_functions();
+
+#if 1
+		    struct compare_t
+		    {
+		      inline bool operator() ( JitFunction*& lhs,  JitFunction*& rhs)
+		      {
+			double sum_lhs = std::accumulate( lhs->get_timings().begin(), lhs->get_timings().end(), 0.0);
+			double sum_rhs = std::accumulate( rhs->get_timings().begin(), rhs->get_timings().end(), 0.0);
+			return (sum_lhs > sum_rhs);
+		      }
+		    };
+
+		    std::sort(all.begin(), all.end(), compare_t());
+#endif
+
+		    TextFileWriter f_stats("qdp_jit_stats.txt");
+
+		    for ( int i = 0 ; i < all.size() ; ++i )
+		      {
+			QDPIO::cout << i << "\t";
+			QDPIO::cout << all.at(i)->get_call_counter() << "\t";
+#ifdef QDP_USE_ROCM_STATS
+			QDPIO::cout << all.at(i)->get_regs() << "\t";
+			QDPIO::cout << all.at(i)->get_vregs() << "\t";
+			QDPIO::cout << all.at(i)->get_spill_store() << "\t";
+			QDPIO::cout << all.at(i)->get_vspill_store() << "\t";
+			QDPIO::cout << all.at(i)->get_private_segment() << "\t";
+			QDPIO::cout << all.at(i)->get_group_segment() << "\t";
+#else
+			QDPIO::cout << all.at(i)->get_stack() << "\t";
+			QDPIO::cout << all.at(i)->get_regs() << "\t";
+			QDPIO::cout << all.at(i)->get_cmem() << "\t";
+#endif
+			
+			auto timings = all.at(i)->get_timings();
+
+			double sum = std::accumulate(timings.begin(), timings.end(), 0.0);
+			double mean = sum / timings.size();
+			
+			double sq_sum = std::inner_product( timings.begin() , timings.end() , timings.begin() , 0.0 );
+			double stdev = 0.;
+			if (timings.size() > 1)
+			  stdev = std::sqrt( sq_sum / timings.size() - mean * mean );
+
+			if (Layout::primaryNode())
+			  printf("%f\t%f\t%f\t",(float)sum,(float)mean,(float)stdev);
+			
+			QDPIO::cout << all.at(i)->get_kernel_name() << "\n";
+
+#if 1
+			//f_stats << std::fixed << std::setw( 11 );
+			f_stats << i << "\t";
+			f_stats << all.at(i)->get_call_counter() << "\t";
+#ifdef QDP_USE_ROCM_STATS
+			f_stats << all.at(i)->get_regs() << "\t";
+			f_stats << all.at(i)->get_vregs() << "\t";
+			f_stats << all.at(i)->get_spill_store() << "\t";
+			f_stats << all.at(i)->get_vspill_store() << "\t";
+			f_stats << all.at(i)->get_private_segment() << "\t";
+			f_stats << all.at(i)->get_group_segment() << "\t";
+#else
+			f_stats << all.at(i)->get_stack() << "\t";
+			f_stats << all.at(i)->get_spill_store() << "\t";
+			f_stats << all.at(i)->get_spill_loads() << "\t";
+			f_stats << all.at(i)->get_regs() << "\t";
+			f_stats << all.at(i)->get_cmem() << "\t";
+#endif
+			
+			f_stats << (float)sum << "\t" << (float)mean << "\t" << (float)stdev << "\t";
+			f_stats << all.at(i)->get_kernel_name() << "\n";
+#endif
+		      }
+
+#if 1
+		    f_stats << "\n\n";
+		    for ( int i = 0 ; i < all.size() ; ++i )
+		      {
+			f_stats << all.at(i)->get_kernel_name() << "\t";
+			f_stats << all.at(i)->get_pretty() << "\n\n";
+		      }
+		    
+		    // Close file
+		    f_stats.flush();
+		    f_stats.close();
+#endif
+		    
+
+		  }
+
+
+
+		if (jit_config_get_tuning())
+		  {
+		    QDPIO::cout << "Kernel auto-tuner"  << std::endl;
+		    QDPIO::cout << "  kernels tuned in this run:               " << jit_util_get_tune_count() << std::endl;
+		    db_tune_write( jit_config_get_tuning_file() );
+		  }
+		
 		
 		FnMapRsrcMatrix::Instance().cleanup();
 
+		// Sync done
+		jit_util_sync_done();
+		
 #if defined(QDP_USE_HDF5)
                 H5close();
 #endif
 
+		// Finalize pool allocator
+		Allocator::theQDPAllocator::DestroySingleton();
 
-		//
-		// finalise qmt
-		//
-		delete [] ThreadReductions::norm2_results;
-		delete [] ThreadReductions::innerProd_results;
-#if defined(QMT_USE_QMT_THREADS)
-		// Finalize threads
-		cout << "QDP use qmt threading: Finalizing threads" << endl;
-		qmt_finalize();
-#endif 
-		
 		printProfile();
+
+#if defined(QDP_USE_PROFILING)
+		if (qdp_jit_CPU_getall().size() > 0)
+		  {
+		    QDPIO::cout << std::endl << std::endl;
+		    QDPIO::cout << "Functions executed on host:" << std::endl;
+		    for (auto const& x : qdp_jit_CPU_getall())
+		      {
+			char lin[80];
+			sprintf(lin, " [%8d] ", x.second );
+			QDPIO::cout << lin << x.first << std::endl;
+		      }
+		  }
+#endif
 		
 		QMP_finalize_msg_passing();
 		

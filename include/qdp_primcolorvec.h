@@ -35,6 +35,19 @@ public:
 
 };
 
+
+  template<class T, int N>
+  struct FirstWord<PColorVector<T,N> >
+  {
+    static typename WordType<T>::Type_t get(const PColorVector<T,N>& a)
+    {
+      return FirstWord<T>::get(a.elem(0));
+    }
+  };
+
+
+
+  
 /*! @} */  // end of group primcolorvector
 
 //-----------------------------------------------------------------------------
@@ -54,6 +67,13 @@ template<class T1, int N>
 struct WordType<PColorVector<T1,N> > 
 {
   typedef typename WordType<T1>::Type_t  Type_t;
+};
+
+
+template<class T1, int N>
+struct ScalarType< PColorVector<T1,N> >
+{
+  typedef PColorVector< typename ScalarType<T1>::Type_t, N> Type_t;
 };
 
 
@@ -179,6 +199,11 @@ struct BinaryReturn<PColorVector<T1,N>, PColorVector<T2,N>, FnInnerProduct> {
 template<class T1, class T2, int N>
 struct BinaryReturn<PColorVector<T1,N>, PColorVector<T2,N>, FnLocalInnerProduct> {
   typedef PScalar<typename BinaryReturn<T1, T2, FnLocalInnerProduct>::Type_t>  Type_t;
+};
+
+template<class T1, class T2, int N>
+struct BinaryReturn<PColorVector<T1,N>, PColorVector<T2,N>, FnLocalColorInnerProduct> {
+  typedef PScalar<typename BinaryReturn<T1, T2, FnLocalColorInnerProduct>::Type_t>  Type_t;
 };
 
 template<class T1, class T2, int N>

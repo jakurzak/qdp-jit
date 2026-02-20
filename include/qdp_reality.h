@@ -263,7 +263,11 @@ void read(XMLReader& xml, const string& path, RScalar<T>& d)
 
 //! Reality complex
 /*! All fields are either complex or scalar reality */
+#ifdef QDP_THRUSTALIGN
+template<class T> class alignas(sizeof(T)*2) RComplex
+#else
 template<class T> class RComplex
+#endif
 {
 public:
   typedef T Sub_t;
@@ -409,8 +413,26 @@ public:
 private:
   T re;
   T im;
-} QDP_ALIGN8;   // possibly force alignment
+};
 
+
+template<class T>
+struct FirstWord<RScalar<T> >
+{
+  static typename WordType<T>::Type_t get(const RScalar<T>& a)
+  {
+    return FirstWord<T>::get(a.elem());
+  }
+};
+
+template<class T>
+struct FirstWord<RComplex<T> >
+{
+  static typename WordType<T>::Type_t get(const RComplex<T>& a)
+  {
+    return FirstWord<T>::get(a.real());
+  }
+};
 
 
 template<class T> 
@@ -424,6 +446,20 @@ template<class T>
 struct JITType<RComplex<T> >
 {
   typedef RComplexJIT<typename JITType<T>::Type_t>  Type_t;
+};
+
+
+template<class T> 
+struct REGType<RScalar<T> >
+{
+  typedef RScalarREG<typename REGType<T>::Type_t>  Type_t;
+};
+
+
+template<class T> 
+struct REGType<RComplex<T> >
+{
+  typedef RComplexREG<typename REGType<T>::Type_t>  Type_t;
 };
 
 
@@ -522,6 +558,7 @@ void read(XMLReader& xml, const string& xpath, RComplex<T>& d)
 // Traits classes 
 //-----------------------------------------------------------------------------
 
+
 // Underlying word type
 template<class T>
 struct WordType<RScalar<T> > 
@@ -534,6 +571,20 @@ struct WordType<RComplex<T> >
 {
   typedef typename WordType<T>::Type_t  Type_t;
 };
+
+
+template<class T> 
+struct ScalarType<RScalar<T> >
+{
+  typedef RScalar<typename ScalarType<T>::Type_t>  Type_t;
+};
+
+template<class T> 
+struct ScalarType<RComplex<T> >
+{
+  typedef RComplex<typename ScalarType<T>::Type_t>  Type_t;
+};
+
 
 // Fixed types
 template<class T> 
@@ -716,96 +767,6 @@ struct TrinaryReturn<RScalar<T1>, RScalar<T2>, RScalar<T3>, FnColorContract> {
   typedef RScalar<typename TrinaryReturn<T1, T2, T3, FnColorContract>::Type_t>  Type_t;
 };
 
-// RScalar
-// Gamma algebra
-template<int N, int m, class T2, class OpGammaConstMultiply>
-struct BinaryReturn<GammaConst<N,m>, RScalar<T2>, OpGammaConstMultiply> {
-  typedef RScalar<typename UnaryReturn<T2, OpUnaryPlus>::Type_t>  Type_t;
-};
-
-template<class T2, int N, int m, class OpMultiplyGammaConst>
-struct BinaryReturn<RScalar<T2>, GammaConst<N,m>, OpMultiplyGammaConst> {
-  typedef RScalar<typename UnaryReturn<T2, OpUnaryPlus>::Type_t>  Type_t;
-};
-
-template<class T2, int N, class OpGammaTypeMultiply>
-struct BinaryReturn<GammaType<N>, RScalar<T2>, OpGammaTypeMultiply> {
-  typedef RScalar<typename UnaryReturn<T2, OpUnaryPlus>::Type_t>  Type_t;
-};
-
-template<class T2, int N, class OpMultiplyGammaType>
-struct BinaryReturn<RScalar<T2>, GammaType<N>, OpMultiplyGammaType> {
-  typedef RScalar<typename UnaryReturn<T2, OpUnaryPlus>::Type_t>  Type_t;
-};
-
-
-// RScalar
-// Gamma algebra
-template<int N, int m, class T2, class OpGammaConstDPMultiply>
-struct BinaryReturn<GammaConstDP<N,m>, RScalar<T2>, OpGammaConstDPMultiply> {
-  typedef RScalar<typename UnaryReturn<T2, OpUnaryPlus>::Type_t>  Type_t;
-};
-
-template<class T2, int N, int m, class OpMultiplyGammaConstDP>
-struct BinaryReturn<RScalar<T2>, GammaConstDP<N,m>, OpMultiplyGammaConstDP> {
-  typedef RScalar<typename UnaryReturn<T2, OpUnaryPlus>::Type_t>  Type_t;
-};
-
-template<class T2, int N, class OpGammaTypeDPMultiply>
-struct BinaryReturn<GammaTypeDP<N>, RScalar<T2>, OpGammaTypeDPMultiply> {
-  typedef RScalar<typename UnaryReturn<T2, OpUnaryPlus>::Type_t>  Type_t;
-};
-
-template<class T2, int N, class OpMultiplyGammaTypeDP>
-struct BinaryReturn<RScalar<T2>, GammaTypeDP<N>, OpMultiplyGammaTypeDP> {
-  typedef RScalar<typename UnaryReturn<T2, OpUnaryPlus>::Type_t>  Type_t;
-};
-
-
-
-// RComplex
-// Gamma algebra
-template<int N, int m, class T2, class OpGammaConstMultiply>
-struct BinaryReturn<GammaConst<N,m>, RComplex<T2>, OpGammaConstMultiply> {
-  typedef RComplex<typename UnaryReturn<T2, OpUnaryPlus>::Type_t>  Type_t;
-};
-
-template<class T2, int N, int m, class OpMultiplyGammaConst>
-struct BinaryReturn<RComplex<T2>, GammaConst<N,m>, OpMultiplyGammaConst> {
-  typedef RComplex<typename UnaryReturn<T2, OpUnaryPlus>::Type_t>  Type_t;
-};
-
-template<class T2, int N, class OpGammaTypeMultiply>
-struct BinaryReturn<GammaType<N>, RComplex<T2>, OpGammaTypeMultiply> {
-  typedef RComplex<typename UnaryReturn<T2, OpUnaryPlus>::Type_t>  Type_t;
-};
-
-template<class T2, int N, class OpMultiplyGammaType>
-struct BinaryReturn<RComplex<T2>, GammaType<N>, OpMultiplyGammaType> {
-  typedef RComplex<typename UnaryReturn<T2, OpUnaryPlus>::Type_t>  Type_t;
-};
-
-
-// Gamma algebra
-template<int N, int m, class T2, class OpGammaConstDPMultiply>
-struct BinaryReturn<GammaConstDP<N,m>, RComplex<T2>, OpGammaConstDPMultiply> {
-  typedef RComplex<typename UnaryReturn<T2, OpUnaryPlus>::Type_t>  Type_t;
-};
-
-template<class T2, int N, int m, class OpMultiplyGammaConstDP>
-struct BinaryReturn<RComplex<T2>, GammaConstDP<N,m>, OpMultiplyGammaConstDP> {
-  typedef RComplex<typename UnaryReturn<T2, OpUnaryPlus>::Type_t>  Type_t;
-};
-
-template<class T2, int N, class OpGammaTypeDPMultiply>
-struct BinaryReturn<GammaTypeDP<N>, RComplex<T2>, OpGammaTypeDPMultiply> {
-  typedef RComplex<typename UnaryReturn<T2, OpUnaryPlus>::Type_t>  Type_t;
-};
-
-template<class T2, int N, class OpMultiplyGammaTypeDP>
-struct BinaryReturn<RComplex<T2>, GammaTypeDP<N>, OpMultiplyGammaTypeDP> {
-  typedef RComplex<typename UnaryReturn<T2, OpUnaryPlus>::Type_t>  Type_t;
-};
 
 
 // Assignment is different
@@ -869,6 +830,7 @@ template<class T1, class T2, class T3>
 struct TrinaryReturn<RComplex<T1>, RComplex<T2>, RComplex<T3>, FnColorContract> {
   typedef RComplex<typename TrinaryReturn<T1, T2, T3, FnColorContract>::Type_t>  Type_t;
 };
+
 
 
 
@@ -1515,14 +1477,6 @@ toWordType(const RScalar<T>& s)
 
 
 
-//------------------------------------------
-//! dest = (mask) ? s1 : dest
-template<class T, class T1> 
-inline
-void copymask(RScalar<T>& d, const RScalar<T1>& mask, const RScalar<T>& s1) 
-{
-  copymask(d.elem(),mask.elem(),s1.elem());
-}
 
 //! dest [float type] = source [int type]
 template<class T, class T1>
@@ -1644,6 +1598,12 @@ template<class T1, class T2>
 struct BinaryReturn<RScalar<T1>, RScalar<T2>, FnLocalInnerProduct > {
   typedef RScalar<typename BinaryReturn<T1, T2, FnLocalInnerProduct>::Type_t>  Type_t;
 };
+
+template<class T1, class T2>
+struct BinaryReturn<RScalar<T1>, RScalar<T2>, FnLocalColorInnerProduct > {
+  typedef RScalar<typename BinaryReturn<T1, T2, FnLocalColorInnerProduct>::Type_t>  Type_t;
+};
+
 
 template<class T1, class T2>
 inline typename BinaryReturn<RScalar<T1>, RScalar<T2>, FnLocalInnerProduct>::Type_t
@@ -2281,15 +2241,6 @@ getSite(const RComplex<T>& s1, int innersite)
 }
 
 
-//! dest = (mask) ? s1 : dest
-template<class T, class T1> 
-inline
-void copymask(RComplex<T>& d, const RScalar<T1>& mask, const RComplex<T>& s1) 
-{
-  copymask(d.real(),mask.elem(),s1.real());
-  copymask(d.imag(),mask.elem(),s1.imag());
-}
-
 
 #if 1
 // Global sum over site indices only
@@ -2451,9 +2402,9 @@ void zero_rep(RComplex<T>& dest)
 
 
 //! dest  = random  
-template<class T, class T1, class T2>
+template<class T>
 inline void
-fill_random(RComplex<T>& d, T1& seed, T2& skewed_seed, const T1& seed_mult)
+fill_random(RComplex<T>& d, Seed& seed, Seed& skewed_seed, const Seed& seed_mult)
 {
   fill_random(d.real(), seed, skewed_seed, seed_mult);
   fill_random(d.imag(), seed, skewed_seed, seed_mult);

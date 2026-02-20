@@ -95,9 +95,22 @@ public:
 
 
 template<class T1, int N>
+struct ScalarType< PColorVectorJIT<T1,N> >
+{
+  typedef PColorVectorJIT< typename ScalarType<T1>::Type_t,N > Type_t;
+};
+
+
+template<class T1, int N>
 struct REGType<PColorVectorJIT<T1,N> > 
 {
   typedef PColorVectorREG<typename REGType<T1>::Type_t,N>  Type_t;
+};
+
+template<class T1, int N>
+struct BASEType<PColorVectorJIT<T1,N> > 
+{
+  typedef PColorVector<typename BASEType<T1>::Type_t,N>  Type_t;
 };
 
 
@@ -234,6 +247,11 @@ struct BinaryReturn<PColorVectorJIT<T1,N>, PColorVectorJIT<T2,N>, FnLocalInnerPr
 };
 
 template<class T1, class T2, int N>
+struct BinaryReturn<PColorVectorJIT<T1,N>, PColorVectorJIT<T2,N>, FnLocalColorInnerProduct> {
+  typedef PScalarJIT<typename BinaryReturn<T1, T2, FnLocalColorInnerProduct>::Type_t>  Type_t;
+};
+
+template<class T1, class T2, int N>
 struct BinaryReturn<PColorVectorJIT<T1,N>, PColorVectorJIT<T2,N>, FnInnerProductReal> {
   typedef PScalarJIT<typename BinaryReturn<T1, T2, FnInnerProductReal>::Type_t>  Type_t;
 };
@@ -256,27 +274,6 @@ template<class T, int N>
 struct UnaryReturn<PColorVectorJIT<T,N>, FnPeekColorVectorREG > {
   typedef PScalarJIT<typename UnaryReturn<T, FnPeekColorVectorREG >::Type_t>  Type_t;
 };
-
-// template<class T, int N>
-// inline typename UnaryReturn<PColorVectorJIT<T,N>, FnPeekColorVectorJIT >::Type_t
-// peekColor(const PColorVectorJIT<T,N>& l, int row)
-// {
-//   typename UnaryReturn<PColorVectorJIT<T,N>, FnPeekColorVectorJIT >::Type_t  d(l.func());
-
-//   // Note, do not need to propagate down since the function is eaten at this level
-//   d.elem() = l.getRegElem(row);
-//   return d;
-// }
-
-// //! Insert color vector components
-// template<class T1, class T2, int N>
-// inline PColorVectorJIT<T1,N>&
-// pokeColor(PColorVectorJIT<T1,N>& l, const PScalarJIT<T2>& r, int row)
-// {
-//   // Note, do not need to propagate down since the function is eaten at this level
-//   l.getRegElem(row) = r.elem();
-//   return l;
-// }
 
 
 //! Insert color vector components
@@ -379,6 +376,26 @@ colorCrossProduct(const PColorVectorJIT<T1,3>& s1, const PColorVectorJIT<T2,3>& 
 
  return d;
 }
+
+//! dest  = random
+template<class T, int N,  class T1, class T2, class T3>
+inline void
+fill_random_jit(PColorVectorJIT<T,N> d, T1 seed, T2 skewed_seed, const T3& seed_mult)
+{
+  // Loop over rows the slowest
+  for(int i=0; i < N; ++i)
+    fill_random_jit(d.elem(i), seed, skewed_seed, seed_mult);
+}
+
+//! dest  = gaussian
+template<class T,class T2, int N>
+inline void
+fill_gaussian(PColorVectorJIT<T,N> d, PColorVectorREG<T2,N>& r1, PColorVectorREG<T2,N>& r2)
+{
+  for(int i=0; i < N; ++i)
+    fill_gaussian(d.elem(i), r1.elem(i), r2.elem(i));
+}
+
 
 
 

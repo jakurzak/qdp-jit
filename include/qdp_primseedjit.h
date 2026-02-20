@@ -92,22 +92,9 @@ public:
     }
 
 
-
-  // PSeedJIT& operator=(const PSeedJIT& rhs) 
-  //   {
-  //     for(int i=0; i < 4; ++i)
-  // 	elem(i) = rhs.elem(i);
-
-  //     return *this;
-  //   }
-
-
 public:
         T& elem(int i)       {return this->arrayF(i);}
   const T& elem(int i) const {return this->arrayF(i);}
-
-  // T& elem(int i)             {return JV<T,4>::getF()[i]; }
-  // const T& elem(int i) const {return JV<T,4>::getF()[i]; }
 };
 
 
@@ -116,10 +103,22 @@ public:
 // Traits classes 
 //-----------------------------------------------------------------------------
 
+template<class T>
+struct ScalarType<PSeedJIT<T> >
+{
+  typedef PSeedJIT< typename ScalarType<T>::Type_t > Type_t;
+};
+  
 template<class T> 
 struct REGType< PSeedJIT<T> >
 {
   typedef PSeedREG<typename REGType<T>::Type_t>  Type_t;
+};
+
+template<class T> 
+struct BASEType< PSeedJIT<T> >
+{
+  typedef PSeed<typename BASEType<T>::Type_t>  Type_t;
 };
 
 
@@ -274,21 +273,13 @@ struct UnaryReturn<PSeedJIT<T>, FnGetSite> {
 //! dest = 0
 template<class T> 
 inline void 
-zero_rep(PSeedJIT<T>& dest) 
+zero_rep(PSeedJIT<T> dest) 
 {
   for(int i=0; i < 4; ++i)
     zero_rep(dest.elem(i));
 }
 
 
-//! dest = (mask) ? s1 : dest
-  template<class T, class T1, class T2> 
-inline void 
-copymask(PSeedJIT<T>& d, const PScalarREG<T1>& mask, const PSeedREG<T2>& s1) 
-{
-  for(int i=0; i < 4; ++i)
-    copymask(d.elem(i),mask.elem(),s1.elem(i));
-}
 
 /*! @} */
 

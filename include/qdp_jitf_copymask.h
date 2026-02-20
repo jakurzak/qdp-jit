@@ -1,78 +1,73 @@
 #ifndef QDP_JITF_COPYMASK_H
 #define QDP_JITF_COPYMASK_H
 
-#include "qmp.h"
 
 namespace QDP {
 
   template<class T,class T1>
-  CUfunction
-  function_copymask_build( OLattice<T>& dest , const OLattice<T1>& mask , const OLattice<T>& src )
+  void
+  function_copymask_build( JitFunction& function, OLattice<T>& dest , const OLattice<T1>& mask , const OLattice<T>& src )
   {
-    if (ptx_db::db_enabled) {
-      CUfunction func = llvm_ptx_db( __PRETTY_FUNCTION__ );
-      if (func)
-	return func;
+    llvm_start_new_function("copymask",__PRETTY_FUNCTION__ );
+
+    WorkgroupGuard workgroupGuard;
+
+    ParamLeafScalar param_leaf;
+
+    typedef typename LeafFunctor<OLattice<T>, ParamLeafScalar>::Type_t  typeJIT;
+    typedef typename LeafFunctor<OLattice<T1>, ParamLeafScalar>::Type_t  maskJIT;
+
+    typeJIT dest_jit(forEach(dest, param_leaf, TreeCombine()));
+    typeJIT src_jit (forEach(src , param_leaf, TreeCombine()));
+    maskJIT mask_jit(forEach(mask, param_leaf, TreeCombine()));
+
+    llvm::Value* r_idx = llvm_thread_idx();
+
+    workgroupGuard.check(r_idx);
+
+
+    JitIf ifCopy( mask_jit.elemREG( JitDeviceLayout::Coalesced , r_idx ).elem().elem().elem().get_val() );
+    {
+      dest_jit.elem( JitDeviceLayout::Coalesced , r_idx ) = src_jit.elemREG( JitDeviceLayout::Coalesced , r_idx );
     }
+    ifCopy.end();
+    
 
-    llvm_start_new_function();
-
-    llvm_add_param<int>();   // we don't need p_lo, since copymask on sublattices is not jitted
-    ParamRef p_hi          = llvm_add_param<int>();
-
-    ParamLeaf param_leaf;
-
-    typedef typename LeafFunctor<OLattice<T>, ParamLeaf>::Type_t  FuncRet_t;
-    typedef typename LeafFunctor<OLattice<T1>, ParamLeaf>::Type_t  FuncRet1_t;
-
-    FuncRet_t dest_jit(forEach(dest, param_leaf, TreeCombine()));
-    FuncRet_t src_jit(forEach(src, param_leaf, TreeCombine()));
-    FuncRet1_t mask_jit(forEach(mask, param_leaf, TreeCombine()));
-
-    //llvm::Value * r_lo      = llvm_derefParam( p_lo );
-    llvm::Value * r_hi      = llvm_derefParam( p_hi );
-
-    llvm::Value* r_idx          = llvm_thread_idx();  
-    llvm::Value* r_out_of_range = llvm_ge( r_idx , r_hi );
-    llvm_cond_exit( r_out_of_range );
-
-    typedef typename REGType<typename FuncRet_t::Subtype_t>::Type_t REGFuncRet_t;
-    typedef typename REGType<typename FuncRet1_t::Subtype_t>::Type_t REGFuncRet1_t;
-
-    REGFuncRet_t src_reg;
-    REGFuncRet1_t mask_reg;
-    src_reg.setup ( src_jit.elem( JitDeviceLayout::Coalesced , r_idx ) );
-    mask_reg.setup( mask_jit.elem( JitDeviceLayout::Coalesced , r_idx ) );
-
-    copymask( dest_jit.elem( JitDeviceLayout::Coalesced , r_idx ) , mask_reg , src_reg );
-
-    llvm_exit();
-
-    return llvm_get_cufunction("jit_copymask.ptx", __PRETTY_FUNCTION__ );
+    jit_get_function(function);
   }
 
 
 
   template<class T,class T1>
   void 
-  function_copymask_exec(CUfunction function, OLattice<T>& dest, const OLattice<T1>& mask, const OLattice<T>& src )
+  function_copymask_exec(JitFunction& function, OLattice<T>& dest, const OLattice<T1>& mask, const OLattice<T>& src )
   {
     AddressLeaf addr_leaf(all);
+
+#ifdef QDP_DEEP_LOG
+    function.type_W = typeid(typename WordType<T>::Type_t).name();
+    function.set_dest_id( dest.getId() );
+    function.set_is_lat(true);
+#endif
 
     forEach(dest, addr_leaf, NullCombine());
     forEach(src, addr_leaf, NullCombine());
     forEach(mask, addr_leaf, NullCombine());
 
-    JitParam jit_lo( QDP_get_global_cache().addJitParamInt( 0 ) );
-    JitParam jit_hi( QDP_get_global_cache().addJitParamInt( Layout::sitesOnNode() ) );
-  
-    std::vector<int> ids;
-    ids.push_back( jit_lo.get_id() );
-    ids.push_back( jit_hi.get_id() );
+    int th_count = Layout::sitesOnNode();
+
+    WorkgroupGuardExec workgroupGuardExec(th_count);
+
+    std::vector<QDPCache::ArgKey> ids;
+    workgroupGuardExec.check(ids);
     for(unsigned i=0; i < addr_leaf.ids.size(); ++i)
       ids.push_back( addr_leaf.ids[i] );
     
-    jit_launch(function,Layout::sitesOnNode(),ids);
+    jit_launch( function , th_count , ids );
+
+#ifdef QDP_DEEP_LOG
+    QDP_get_global_logger().log(dest,all);
+#endif
   }
 
 }

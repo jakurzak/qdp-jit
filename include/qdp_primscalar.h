@@ -170,11 +170,27 @@ private:
 };
 
 
+template<class T>
+struct FirstWord<PScalar<T> >
+{
+  static typename WordType<T>::Type_t get(const PScalar<T>& a)
+  {
+    return FirstWord<T>::get(a.elem());
+  }
+};
 
+    
 template<class T> 
 struct JITType<PScalar<T> >
 {
   typedef PScalarJIT<typename JITType<T>::Type_t>  Type_t;
+};
+
+
+template<class T> 
+struct REGType<PScalar<T> >
+{
+  typedef PScalarREG<typename REGType<T>::Type_t>  Type_t;
 };
 
 
@@ -254,6 +270,15 @@ void read(XMLReader& xml, const string& path, PScalar<T>& d)
 // Traits classes 
 //-----------------------------------------------------------------------------
 
+
+template<class T>
+struct ScalarType<PScalar<T> >
+{
+  typedef PScalar< typename ScalarType<T>::Type_t > Type_t;
+};
+
+
+  
 // Underlying word type
 template<class T>
 struct WordType<PScalar<T> > 
@@ -379,7 +404,6 @@ template<class T1, class T2>
 struct BinaryReturn<PScalar<T1>, PScalar<T2>, OpRightShiftAssign > {
   typedef PScalar<T1> &Type_t;
 };
- 
 
 
 
@@ -1065,22 +1089,6 @@ pokeSpin(PScalar<T1>& l, const PScalar<T2>& r, int row, int col)
 }
 
 
-//-----------------------------------------------------------------------------
-//! PScalar = Gamma<N,m> * PScalar
-template<class T2, int N, int m>
-inline typename BinaryReturn<GammaConst<N,m>, PScalar<T2>, OpGammaConstMultiply>::Type_t
-operator*(const GammaConst<N,m>& l, const PScalar<T2>& r)
-{
-  return l * r.elem();
-}
-
-//! PScalar = PScalar * Gamma<N,m>
-template<class T2, int N, int m>
-inline typename BinaryReturn<PScalar<T2>, GammaConst<N,m>, OpGammaConstMultiply>::Type_t
-operator*(const PScalar<T2>& l, const GammaConst<N,m>& r)
-{
-  return l.elem() * r;
-}
 
 //-----------------------------------------------------------------------------
 //! PScalar = SpinProject(PScalar)
@@ -1335,15 +1343,6 @@ colorCrossProduct(const PScalar<T1>& s1, const PScalar<T2>& s2)
 
 
 
-//-----------------------------------------------------------------------------
-//! dest = (mask) ? s1 : dest
-template<class T, class T1> 
-inline void 
-copymask(PScalar<T>& d, const PScalar<T1>& mask, const PScalar<T>& s1) 
-{
-  copymask(d.elem(),mask.elem(),s1.elem());
-}
-
 //! dest  = random  
 template<class T, class T1, class T2>
 inline void
@@ -1438,6 +1437,12 @@ struct BinaryReturn<PScalar<T1>, PScalar<T2>, FnLocalInnerProduct > {
 };
 
 template<class T1, class T2>
+struct BinaryReturn<PScalar<T1>, PScalar<T2>, FnLocalColorInnerProduct > {
+  typedef PScalar<typename BinaryReturn<T1, T2, FnLocalColorInnerProduct>::Type_t>  Type_t;
+};
+
+  
+template<class T1, class T2>
 inline typename BinaryReturn<PScalar<T1>, PScalar<T2>, FnLocalInnerProduct>::Type_t
 localInnerProduct(const PScalar<T1>& s1, const PScalar<T2>& s2)
 {
@@ -1480,6 +1485,7 @@ where(const PScalar<T1>& a, const PScalar<T2>& b, const PScalar<T3>& c)
 {
   return where(a.elem(), b.elem(), c.elem());
 }
+
 
 
 //-----------------------------------------------------------------------------
@@ -1534,6 +1540,8 @@ zero_rep(PScalar<T>& dest)
   zero_rep(dest.elem());
 }
 
+
+
 //! dest [some type] = source [some type]
 template<class T, class T1>
 inline void 
@@ -1569,6 +1577,8 @@ gather_sites(PScalar<T>& d,
 {
   gather_sites(d.elem(), s0.elem(), i0, s1.elem(), i1, s2.elem(), i2, s3.elem(), i3);
 }
+
+
 
 /*! @} */  // end of group primscalar
 

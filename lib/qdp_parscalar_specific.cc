@@ -13,23 +13,9 @@
 namespace QDP {
 
 
-  void check_abort() {
-    std::string input;
-    int myNumber = 0;
-    
-    while (myNumber != 1 && myNumber != 2) {
-      cout << "1 - abort, 2 - continue: ";
-      getline(cin, input);
-      std::stringstream myStream(input);
-      myStream >> myNumber;
-    }
 
-    if (myNumber == 1)
-      QDP_error_exit("Abort!");
-  }
-
-//-----------------------------------------------------------------------------
-// IO routine solely for debugging. Only defined here
+  //-----------------------------------------------------------------------------
+  // IO routine solely for debugging. Only defined here
   template<class T>
   ostream& operator<<(ostream& s, const multi1d<T>& s1)
   {
@@ -128,12 +114,12 @@ namespace QDP {
     // If there is not any communications, then return
     //
     if (! offnodeP)
-    {
+      {
 #if QDP_DEBUG >= 3
-      QDP_info("no off-node communications: exiting Map::make");
+	QDP_info("no off-node communications: exiting Map::make");
 #endif
-      return;
-    }
+	return;
+      }
 
     // Finally setup the srce and dest nodes now without my_node
     srcenodes.resize(cnt_srcenodes);
@@ -178,6 +164,11 @@ namespace QDP {
 
   void Map::make_lazy(const Subset& s) const
   {
+    if (lazy_done_s(s))
+      return;
+
+    //QDPIO::cout << "Map::make_lazy." << std::endl;
+    
     const int nodeSites = Layout::sitesOnNode();
     const int my_node   = Layout::nodeNumber();
 
@@ -186,11 +177,17 @@ namespace QDP {
 	goffsets.resize( MasterSet::Instance().numSubsets() );
 	soffsets.resize( MasterSet::Instance().numSubsets() );
 	roffsets.resize( MasterSet::Instance().numSubsets() );
-
+#if defined (QDP_CODEGEN_VECTOR)
+	loffsets.resize( MasterSet::Instance().numSubsets() );
+#endif
+	
 	goffsetsId.resize( MasterSet::Instance().numSubsets() );
 	soffsetsId.resize( MasterSet::Instance().numSubsets() );
 	roffsetsId.resize( MasterSet::Instance().numSubsets() );
-
+#if defined (QDP_CODEGEN_VECTOR)
+	loffsetsId.resize( MasterSet::Instance().numSubsets() );
+#endif
+	
 	srcenodes_num.resize( MasterSet::Instance().numSubsets() );
 	destnodes_num.resize( MasterSet::Instance().numSubsets() );
 
@@ -234,131 +231,160 @@ namespace QDP {
 	  }
       }
 
-    goffsetsId[s_no] = QDP_get_global_cache().registrateOwnHostMem( sizeof(int)*goffsets[s_no].size() , 
-								    goffsets[s_no].slice() , NULL );
+    goffsetsId[s_no] = QDP_get_global_cache().addOwnHostMemNoPage( sizeof(int)*goffsets[s_no].size() , 
+								   goffsets[s_no].slice() );
+
+    
+#if defined (QDP_CODEGEN_VECTOR)
+    //QDPIO::cout << "doing loffsets." << std::endl;
+    
+    for( int linear = 0 ; linear < nodeSites ; ++linear )
+      {
+	// Check whether 'fcoor' leaves the local vnode subgrid
+	multi1d<int> coord = Layout::siteCoords(my_node, linear);
+
+	bool leaves = false;
+	for ( int i = 0 ; i < Nd ; ++i )
+	  {
+	    int orig = coord[i]               / Layout::virtualNodeSubgridLattSize()[i];
+	    int dest = lazy_fcoord[linear][i] / Layout::virtualNodeSubgridLattSize()[i];
+
+	    if ( orig != dest )
+	      leaves = true;
+	  }
+	
+	if ( leaves )
+	  {
+	    if ( MasterSet::Instance().getSubset(s_no).isElement( linear ) )
+	      {
+		//QDPIO::cout << "loffset " << linear << std::endl;
+		loffsets[s_no].push_back( linear );
+	      }
+	  }
+      }
+#endif
+    
+    if (myId < 0)
+      {
+	myId = MasterMap::Instance().register_justid(*this);
+	//QDPIO::cout << "register this Map with the mastermap. got Id = " << myId << "\n";
+      }
 
     lazy_done[s_no] = true;
 
-    if (! offnodeP)
+//     if (! offnodeP)
+//       {
+// #if QDP_DEBUG >= 3
+// 	QDP_info("no off-node communications: exiting Map::make");
+// #endif
+// 	return;
+//       }
+
+    if (offnodeP)
       {
-#if QDP_DEBUG >= 3
-	QDP_info("no off-node communications: exiting Map::make");
-#endif
-	return;
-      }
+	// Run through the lists and find the number of each unique node
+	srcenodes_num[s_no].resize(srcenodes.size());
+	destnodes_num[s_no].resize(destnodes.size());
 
-    // Run through the lists and find the number of each unique node
-    srcenodes_num[s_no].resize(srcenodes.size());
-    destnodes_num[s_no].resize(destnodes.size());
+	srcenodes_num[s_no] = 0;
+	destnodes_num[s_no] = 0;
 
-    srcenodes_num[s_no] = 0;
-    destnodes_num[s_no] = 0;
-
-    // For now assume that we send as many sites as we receive
+	// For now assume that we send as many sites as we receive
       
-    for(int linear=0; linear < nodeSites; ++linear)
-      {
-	if ( MasterSet::Instance().getSubset(s_no).isElement(linear ) )
+	for(int linear=0; linear < nodeSites; ++linear)
 	  {
-	    int this_node = srcnode[linear];
-	    if (this_node != my_node)
+	    if ( MasterSet::Instance().getSubset(s_no).isElement(linear ) )
 	      {
-		for(int i=0; i < srcenodes_num[s_no].size(); ++i)
+		int this_node = srcnode[linear];
+		if (this_node != my_node)
 		  {
-		    if (srcenodes[i] == this_node)
+		    for(int i=0; i < srcenodes_num[s_no].size(); ++i)
 		      {
-			srcenodes_num[s_no][i]++;
-			destnodes_num[s_no][i]++;
-			break;
+			if (srcenodes[i] == this_node)
+			  {
+			    srcenodes_num[s_no][i]++;
+			    destnodes_num[s_no][i]++;
+			    break;
+			  }
 		      }
 		  }
 	      }
 	  }
-      }
 
-    // Now make a small scatter array for the dest_buf so that when data
-    // is sent, it is put in an order the gather can pick it up
-    // If we allow multiple dest nodes, then soffsets here needs to be
-    // an array of arrays
-    soffsets[s_no].resize(destnodes_num[s_no][0]);
-    roffsets[s_no].resize(srcenodes_num[s_no][0]);
+	// Now make a small scatter array for the dest_buf so that when data
+	// is sent, it is put in an order the gather can pick it up
+	// If we allow multiple dest nodes, then soffsets here needs to be
+	// an array of arrays
+	soffsets[s_no].resize(destnodes_num[s_no][0]);
+	roffsets[s_no].resize(srcenodes_num[s_no][0]);
 
-    // Loop through sites on my *destination* node - here I assume all nodes have
-    // the same number of sites. Mimic the gather pattern needed on that node and
-    // set my scatter array to scatter into the correct site order.
-    // Further assume that the subsets have equal sitetables on all nodes.
+	// Loop through sites on my *destination* node - here I assume all nodes have
+	// the same number of sites. Mimic the gather pattern needed on that node and
+	// set my scatter array to scatter into the correct site order.
+	// Further assume that the subsets have equal sitetables on all nodes.
 
-    int ri=0;
-    int si=0;
-    for(int i=0; i < nodeSites; ++i) 
-      {
-	multi1d<int> fcoord = lazy_destnodes0_fcoord[i];
+	int ri=0;
+	int si=0;
+	for(int i=0; i < nodeSites; ++i) 
+	  {
+	    multi1d<int> fcoord = lazy_destnodes0_fcoord[i];
 	    
-	int fnode = Layout::nodeNumber(fcoord);
-	int fline = Layout::linearSiteIndex(fcoord);
+	    int fnode = Layout::nodeNumber(fcoord);
+	    int fline = Layout::linearSiteIndex(fcoord);
 
-	if ( MasterSet::Instance().getSubset(s_no).isElement(i)  &&  fnode == my_node )
-	  soffsets[s_no][si++] = fline;
+	    if ( MasterSet::Instance().getSubset(s_no).isElement(i)  &&  fnode == my_node )
+	      soffsets[s_no][si++] = fline;
 
-	if ( MasterSet::Instance().getSubset(s_no).isElement(i)  &&  srcnode[i] != my_node )
-	  roffsets[s_no][ri++] = i;
-      }
+	    if ( MasterSet::Instance().getSubset(s_no).isElement(i)  &&  srcnode[i] != my_node )
+	      roffsets[s_no][ri++] = i;
+	  }
 
-    if ( ri != srcenodes_num[s_no][0] )
-      QDP_error_exit("internal error: ri != srcenodes_num[0]");
+	if ( ri != srcenodes_num[s_no][0] )
+	  QDP_error_exit("internal error: ri != srcenodes_num[0]");
 
-    if ( si != destnodes_num[s_no][0] )
-      QDP_error_exit("internal error: si != destnodes_num[0]");
+	if ( si != destnodes_num[s_no][0] )
+	  QDP_error_exit("internal error: si != destnodes_num[0]");
 
 #if 0
-    if (roffsets[s_no].size()==0)
-      QDP_error_exit("rsoffsets empty");
-    if (soffsets[s_no].size()==0)
-      QDP_error_exit("ssoffsets empty");
+	if (roffsets[s_no].size()==0)
+	  QDP_error_exit("rsoffsets empty");
+	if (soffsets[s_no].size()==0)
+	  QDP_error_exit("ssoffsets empty");
 #endif
-    if (goffsets[s_no].size()==0)
-      QDP_error_exit("gsoffsets empty");
+	if (goffsets[s_no].size()==0)
+	  QDP_error_exit("gsoffsets empty");
 
-    roffsetsId[s_no] = QDP_get_global_cache().registrateOwnHostMem( sizeof(int)*roffsets[s_no].size() , roffsets[s_no].slice() , NULL );
-    soffsetsId[s_no] = QDP_get_global_cache().registrateOwnHostMem( sizeof(int)*soffsets[s_no].size() , soffsets[s_no].slice() , NULL );
+	roffsetsId[s_no] = QDP_get_global_cache().addOwnHostMem( sizeof(int)*roffsets[s_no].size() , roffsets[s_no].slice() );
+	soffsetsId[s_no] = QDP_get_global_cache().addOwnHostMem( sizeof(int)*soffsets[s_no].size() , soffsets[s_no].slice() );
 
 #if QDP_DEBUG >= 3
-    for(int i=0; i < destnodes.size(); ++i)
-      {
-	QDP_info("srcenodes(%d) = %d",i,srcenodes(i));
-	QDP_info("destnodes(%d) = %d",i,destnodes(i));
-      }
+	for(int i=0; i < destnodes.size(); ++i)
+	  {
+	    QDP_info("srcenodes(%d) = %d",i,srcenodes(i));
+	    QDP_info("destnodes(%d) = %d",i,destnodes(i));
+	  }
 
-    for(int i=0; i < destnodes_num.size(); ++i)
-      {
-	QDP_info("srcenodes_num(%d) = %d",i,srcenodes_num(i));
-	QDP_info("destnodes_num(%d) = %d",i,destnodes_num(i));
-      }
+	for(int i=0; i < destnodes_num.size(); ++i)
+	  {
+	    QDP_info("srcenodes_num(%d) = %d",i,srcenodes_num(i));
+	    QDP_info("destnodes_num(%d) = %d",i,destnodes_num(i));
+	  }
 #endif
- 
+      } // offnode
+    
 #if QDP_DEBUG >= 3
     QDP_info("exiting Map::make");
 #endif
 
-    //StopWatch t;
-    //t.start();
-    if (myId < 0) {
-      myId = MasterMap::Instance().registrate_justid(*this);
-      //QDPIO::cout << "register this Map with the mastermap. got Id = " << myId << "\n";
-    }
-    MasterMap::Instance().registrate_work(*this,s);
-    //t.stop();
-    //QDPIO::cerr << "Face and inner compute time = " << t.getTimeInSeconds() << " secs\n";
-    
   } // make_lazy
 
   
   
 
 
-//------------------------------------------------------------------------
-// Message passing convenience routines
-//------------------------------------------------------------------------
+  //------------------------------------------------------------------------
+  // Message passing convenience routines
+  //------------------------------------------------------------------------
 
   namespace QDPInternal
   {
@@ -370,9 +396,9 @@ namespace QDP {
 
       // Only primary node can grab string
       if (Layout::primaryNode()) 
-      {
-	lleng = result.length();
-      }
+	{
+	  lleng = result.length();
+	}
 
       // First must broadcast size of string
       QDPInternal::broadcast(lleng);
@@ -392,9 +418,9 @@ namespace QDP {
       // All nodes can now grab char array and make a string, but only
       // need this on non-primary nodes
       if (! Layout::primaryNode())
-      {
-	result.assign(dd_tmp, lleng);
-      }
+	{
+	  result.assign(dd_tmp, lleng);
+	}
 
       // Clean-up and boogie
       delete[] dd_tmp;
@@ -411,12 +437,12 @@ namespace QDP {
     { 
       // On non-grid machines, use a clear-to-send like protocol
       if (! QDPInternal::gridArch())
-      {
-	if(Layout::nodeNumber() == 0 && node != 0)
-	  QDPInternal::sendToWait(buffer, node, count);
-	if(Layout::nodeNumber() == node && node != 0)
-	  QDPInternal::recvFromWait(buffer, 0, count);
-      }
+	{
+	  if(Layout::nodeNumber() == 0 && node != 0)
+	    QDPInternal::sendToWait(buffer, node, count);
+	  if(Layout::nodeNumber() == node && node != 0)
+	    QDPInternal::recvFromWait(buffer, 0, count);
+	}
     }
 
     //! Route to another node (blocking)
@@ -427,7 +453,7 @@ namespace QDP {
 	       count,srce_node,dest_node);
 #endif
 
-//    QMP_route(buffer, count, srce_node, dest_node);
+      //    QMP_route(buffer, count, srce_node, dest_node);
       DML_route_bytes((char*)buffer, count, srce_node, dest_node);
 
 #if QDP_DEBUG >= 2
@@ -486,8 +512,8 @@ namespace QDP {
   }
 
 
-//-----------------------------------------------------------------------------
-// Write a lattice quantity
+  //-----------------------------------------------------------------------------
+  // Write a lattice quantity
   void writeOLattice(BinaryWriter& bin, 
 		     const char* output, size_t size, size_t nmemb)
   {
@@ -504,52 +530,52 @@ namespace QDP {
     int old_node = 0;
 
     for(int site=0; site < Layout::vol(); site += xinc)
-    {
-      // first site in each segment uniquely identifies the node
-      int node = Layout::nodeNumber(crtesn(site, Layout::lattSize()));
-
-      // Send nodes must wait for a ready signal from the master node
-      // to prevent message pileups on the master node
-      if (node != old_node)
       {
-	// On non-grid machines, use a clear-to-send like protocol
-	QDPInternal::clearToSend(recv_buf,sizeof(int),node);
-	old_node = node;
-      }
+	// first site in each segment uniquely identifies the node
+	int node = Layout::nodeNumber(crtesn(site, Layout::lattSize()));
+
+	// Send nodes must wait for a ready signal from the master node
+	// to prevent message pileups on the master node
+	if (node != old_node)
+	  {
+	    // On non-grid machines, use a clear-to-send like protocol
+	    QDPInternal::clearToSend(recv_buf,sizeof(int),node);
+	    old_node = node;
+	  }
     
-      // Copy to buffer: be really careful since max(linear) could vary among nodes
-      if (Layout::nodeNumber() == node)
-      {
-	for(int i=0; i < xinc; ++i)
-	{
-	  int linear = Layout::linearSiteIndex(crtesn(site+i, Layout::lattSize()));
-	  memcpy(recv_buf+i*sizemem, output+linear*sizemem, sizemem);
-	}
-      }
-
-      // Send result to primary node. Avoid sending prim-node sending to itself
-      if (node != 0)
-      {
-#if 1
-	// All nodes participate
-	QDPInternal::route((void *)recv_buf, node, 0, tot_size);
-#else
-	if (Layout::primaryNode())
-	  QDPInternal::recvFromWait((void *)recv_buf, node, tot_size);
-
+	// Copy to buffer: be really careful since max(linear) could vary among nodes
 	if (Layout::nodeNumber() == node)
-	  QDPInternal::sendToWait((void *)recv_buf, 0, tot_size);
-#endif
-      }
+	  {
+	    for(int i=0; i < xinc; ++i)
+	      {
+		int linear = Layout::linearSiteIndex(crtesn(site+i, Layout::lattSize()));
+		memcpy(recv_buf+i*sizemem, output+linear*sizemem, sizemem);
+	      }
+	  }
 
-      bin.writeArrayPrimaryNode(recv_buf, size, nmemb*xinc);
-    }
+	// Send result to primary node. Avoid sending prim-node sending to itself
+	if (node != 0)
+	  {
+#if 1
+	    // All nodes participate
+	    QDPInternal::route((void *)recv_buf, node, 0, tot_size);
+#else
+	    if (Layout::primaryNode())
+	      QDPInternal::recvFromWait((void *)recv_buf, node, tot_size);
+
+	    if (Layout::nodeNumber() == node)
+	      QDPInternal::sendToWait((void *)recv_buf, 0, tot_size);
+#endif
+	  }
+
+	bin.writeArrayPrimaryNode(recv_buf, size, nmemb*xinc);
+      }
 
     delete[] recv_buf;
   }
 
 
-// Write a single site of a lattice quantity
+  // Write a single site of a lattice quantity
   void writeOLattice(BinaryWriter& bin, 
 		     const char* output, size_t size, size_t nmemb,
 		     const multi1d<int>& coord)
@@ -575,18 +601,18 @@ namespace QDP {
   
     // Send result to primary node. Avoid sending prim-node sending to itself
     if (node != 0)
-    {
+      {
 #if 1
-      // All nodes participate
-      QDPInternal::route((void *)recv_buf, node, 0, tot_size);
+	// All nodes participate
+	QDPInternal::route((void *)recv_buf, node, 0, tot_size);
 #else
-      if (Layout::primaryNode())
-	QDPInternal::recvFromWait((void *)recv_buf, node, tot_size);
+	if (Layout::primaryNode())
+	  QDPInternal::recvFromWait((void *)recv_buf, node, tot_size);
 
-      if (Layout::nodeNumber() == node)
-	QDPInternal::sendToWait((void *)recv_buf, 0, tot_size);
+	if (Layout::nodeNumber() == node)
+	  QDPInternal::sendToWait((void *)recv_buf, 0, tot_size);
 #endif
-    }
+      }
 
     bin.writeArray(recv_buf, size, nmemb);
 
@@ -594,8 +620,8 @@ namespace QDP {
   }
 
 
-//-----------------------------------------------------------------------------
-// Write a lattice quantity
+  //-----------------------------------------------------------------------------
+  // Write a lattice quantity
   void writeOLattice(BinaryWriter& bin, 
 		     const char* output, size_t size, size_t nmemb,
 		     const Subset& sub)
@@ -623,67 +649,67 @@ namespace QDP {
     int old_node = 0;
 
     for(int site=0; site < Layout::vol(); site += xinc)
-    {
-      // This algorithm is cumbersome. We do not keep the coordinate function for the subset.
-      // So, we have to ask the sending node how many sites are to be transferred,
-      // and rely on each node to send whatever number of sites live in the desired
-      // subgridLattSize strip.
-
-      // first site in each segment uniquely identifies the node
-      int node = Layout::nodeNumber(crtesn(site, Layout::lattSize()));
-
-      // Send nodes must wait for a ready signal from the master node
-      // to prevent message pileups on the master node
-      if (node != old_node)
       {
-	// On non-grid machines, use a clear-to-send like protocol
-	QDPInternal::clearToSend(recv_buf,sizeof(int),node);
-	old_node = node;
-      }
-    
-      // Copy to buffer: be really careful since max(linear) could vary among nodes
-      int site_cnt = 0;
-      if (Layout::nodeNumber() == node)
-      {
-	for(int i=0; i < xinc; ++i)
-	{
-	  int linear = Layout::linearSiteIndex(crtesn(site+i, Layout::lattSize()));
-	  if (lat_color[linear] == color)
+	// This algorithm is cumbersome. We do not keep the coordinate function for the subset.
+	// So, we have to ask the sending node how many sites are to be transferred,
+	// and rely on each node to send whatever number of sites live in the desired
+	// subgridLattSize strip.
+
+	// first site in each segment uniquely identifies the node
+	int node = Layout::nodeNumber(crtesn(site, Layout::lattSize()));
+
+	// Send nodes must wait for a ready signal from the master node
+	// to prevent message pileups on the master node
+	if (node != old_node)
 	  {
-	    memcpy(recv_buf+site_cnt*sizemem, output+linear*sizemem, sizemem);
-	    site_cnt++;
+	    // On non-grid machines, use a clear-to-send like protocol
+	    QDPInternal::clearToSend(recv_buf,sizeof(int),node);
+	    old_node = node;
 	  }
-	}
-	memcpy(recv_buf_size, (void *)&site_cnt, sizeof(int));
-      }
+    
+	// Copy to buffer: be really careful since max(linear) could vary among nodes
+	int site_cnt = 0;
+	if (Layout::nodeNumber() == node)
+	  {
+	    for(int i=0; i < xinc; ++i)
+	      {
+		int linear = Layout::linearSiteIndex(crtesn(site+i, Layout::lattSize()));
+		if (lat_color[linear] == color)
+		  {
+		    memcpy(recv_buf+site_cnt*sizemem, output+linear*sizemem, sizemem);
+		    site_cnt++;
+		  }
+	      }
+	    memcpy(recv_buf_size, (void *)&site_cnt, sizeof(int));
+	  }
 
-      // Send result to primary node. Avoid sending prim-node sending to itself
-      if (node != 0)
-      {
+	// Send result to primary node. Avoid sending prim-node sending to itself
+	if (node != 0)
+	  {
 #if 0
-	// All nodes participate
-	// First send the byte size for this 
-	QDP_error_exit("Do not support route in writeOLattice(sub)");
+	    // All nodes participate
+	    // First send the byte size for this 
+	    QDP_error_exit("Do not support route in writeOLattice(sub)");
 
 #else
-	// We are using the point-to-point version
-	if (Layout::primaryNode())
-	{
-	  QDPInternal::recvFromWait((void *)recv_buf_size, node, sizeof(int));
-	  memcpy((void *)&site_cnt, recv_buf_size, sizeof(int));
-	  QDPInternal::recvFromWait((void *)recv_buf, node, site_cnt*sizemem);
-	}
+	    // We are using the point-to-point version
+	    if (Layout::primaryNode())
+	      {
+		QDPInternal::recvFromWait((void *)recv_buf_size, node, sizeof(int));
+		memcpy((void *)&site_cnt, recv_buf_size, sizeof(int));
+		QDPInternal::recvFromWait((void *)recv_buf, node, site_cnt*sizemem);
+	      }
 
-	if (Layout::nodeNumber() == node)
-	{
-	  QDPInternal::sendToWait((void *)recv_buf_size, 0, sizeof(int));
-	  QDPInternal::sendToWait((void *)recv_buf, 0, site_cnt*sizemem);
-	}
+	    if (Layout::nodeNumber() == node)
+	      {
+		QDPInternal::sendToWait((void *)recv_buf_size, 0, sizeof(int));
+		QDPInternal::sendToWait((void *)recv_buf, 0, site_cnt*sizemem);
+	      }
 #endif
-      }
+	  }
 
-      bin.writeArrayPrimaryNode(recv_buf, size, nmemb*site_cnt);
-    }
+	bin.writeArrayPrimaryNode(recv_buf, size, nmemb*site_cnt);
+      }
 
     delete[] recv_buf_size;
     delete[] recv_buf;
@@ -691,8 +717,8 @@ namespace QDP {
 
 
 
-//! Read a lattice quantity
-/*! This code assumes no inner grid */
+  //! Read a lattice quantity
+  /*! This code assumes no inner grid */
   void readOLattice(BinaryReader& bin, 
 		    char* input, size_t size, size_t nmemb)
   {
@@ -707,44 +733,44 @@ namespace QDP {
 
     // Find the location of each site and send to primary node
     for(int site=0; site < Layout::vol(); site += xinc)
-    {
-      // first site in each segment uniquely identifies the node
-      int node = Layout::nodeNumber(crtesn(site, Layout::lattSize()));
-
-      // Only on primary node read the data
-      bin.readArrayPrimaryNode(recv_buf, size, nmemb*xinc);
-
-      // Send result to destination node. Avoid sending prim-node sending to itself
-      if (node != 0)
       {
+	// first site in each segment uniquely identifies the node
+	int node = Layout::nodeNumber(crtesn(site, Layout::lattSize()));
+
+	// Only on primary node read the data
+	bin.readArrayPrimaryNode(recv_buf, size, nmemb*xinc);
+
+	// Send result to destination node. Avoid sending prim-node sending to itself
+	if (node != 0)
+	  {
 #if 1
-	// All nodes participate
-	QDPInternal::route((void *)recv_buf, 0, node, tot_size);
+	    // All nodes participate
+	    QDPInternal::route((void *)recv_buf, 0, node, tot_size);
 #else
-	if (Layout::primaryNode())
-	  QDPInternal::sendToWait((void *)recv_buf, node, tot_size);
+	    if (Layout::primaryNode())
+	      QDPInternal::sendToWait((void *)recv_buf, node, tot_size);
+
+	    if (Layout::nodeNumber() == node)
+	      QDPInternal::recvFromWait((void *)recv_buf, 0, tot_size);
+#endif
+	  }
 
 	if (Layout::nodeNumber() == node)
-	  QDPInternal::recvFromWait((void *)recv_buf, 0, tot_size);
-#endif
-      }
+	  {
+	    for(int i=0; i < xinc; ++i)
+	      {
+		int linear = Layout::linearSiteIndex(crtesn(site+i, Layout::lattSize()));
 
-      if (Layout::nodeNumber() == node)
-      {
-	for(int i=0; i < xinc; ++i)
-	{
-	  int linear = Layout::linearSiteIndex(crtesn(site+i, Layout::lattSize()));
-
-	  memcpy(input+linear*sizemem, recv_buf+i*sizemem, sizemem);
-	}
+		memcpy(input+linear*sizemem, recv_buf+i*sizemem, sizemem);
+	      }
+	  }
       }
-    }
 
     delete[] recv_buf;
   }
 
-//! Read a single site worth of a lattice quantity
-/*! This code assumes no inner grid */
+  //! Read a single site worth of a lattice quantity
+  /*! This code assumes no inner grid */
   void readOLattice(BinaryReader& bin, 
 		    char* input, size_t size, size_t nmemb,
 		    const multi1d<int>& coord)
@@ -765,18 +791,18 @@ namespace QDP {
 
     // Send result to destination node. Avoid sending prim-node sending to itself
     if (node != 0)
-    {
+      {
 #if 1
-      // All nodes participate
-      QDPInternal::route((void *)recv_buf, 0, node, tot_size);
+	// All nodes participate
+	QDPInternal::route((void *)recv_buf, 0, node, tot_size);
 #else
-      if (Layout::primaryNode())
-	QDPInternal::sendToWait((void *)recv_buf, node, tot_size);
+	if (Layout::primaryNode())
+	  QDPInternal::sendToWait((void *)recv_buf, node, tot_size);
 
-      if (Layout::nodeNumber() == node)
-	QDPInternal::recvFromWait((void *)recv_buf, 0, tot_size);
+	if (Layout::nodeNumber() == node)
+	  QDPInternal::recvFromWait((void *)recv_buf, 0, tot_size);
 #endif
-    }
+      }
 
     if (Layout::nodeNumber() == node)
       memcpy(input+linear*tot_size, recv_buf, tot_size);
@@ -784,8 +810,8 @@ namespace QDP {
     delete[] recv_buf;
   }
 
-//! Read a lattice quantity
-/*! This code assumes no inner grid */
+  //! Read a lattice quantity
+  /*! This code assumes no inner grid */
   void readOLattice(BinaryReader& bin, 
 		    char* input, size_t size, size_t nmemb,
 		    const Subset& sub)
@@ -811,81 +837,81 @@ namespace QDP {
 
     // Find the location of each site and send to primary node
     for(int site=0; site < Layout::vol(); site += xinc)
-    {
-      // This algorithm is cumbersome. We do not keep the coordinate function for the subset.
-      // So, we have to ask the sending node how many sites are to be transferred,
-      // and rely on each node to send whatever number of sites live in the desired
-      // subgridLattSize strip.
-
-      // first site in each segment uniquely identifies the node
-      int node = Layout::nodeNumber(crtesn(site, Layout::lattSize()));
-
-      // Find the amount of data to read. Unfortunately, have to ask the remote node
-      // Place the result in a send buffer
-      int site_cnt = 0;
-      if (Layout::nodeNumber() == node)
       {
-	for(int i=0; i < xinc; ++i)
-	{
-	  int linear = Layout::linearSiteIndex(crtesn(site+i, Layout::lattSize()));
-	  if (lat_color[linear] == color)
-	  {
-	    site_cnt++;
-	  }
-	}
-	memcpy(recv_buf_size, (void *)&site_cnt, sizeof(int));
-      }
+	// This algorithm is cumbersome. We do not keep the coordinate function for the subset.
+	// So, we have to ask the sending node how many sites are to be transferred,
+	// and rely on each node to send whatever number of sites live in the desired
+	// subgridLattSize strip.
 
-      if (node != 0)
-      {
-	// Send the data size to the primary node.
-	// We are using the point-to-point version
-	if (Layout::primaryNode())
-	{
-	  QDPInternal::recvFromWait((void *)recv_buf_size, node, sizeof(int));
-	  memcpy((void *)&site_cnt, recv_buf_size, sizeof(int));
-	}
+	// first site in each segment uniquely identifies the node
+	int node = Layout::nodeNumber(crtesn(site, Layout::lattSize()));
 
+	// Find the amount of data to read. Unfortunately, have to ask the remote node
+	// Place the result in a send buffer
+	int site_cnt = 0;
 	if (Layout::nodeNumber() == node)
-	{
-	  QDPInternal::sendToWait((void *)recv_buf_size, 0, sizeof(int));
-	}
-      }
+	  {
+	    for(int i=0; i < xinc; ++i)
+	      {
+		int linear = Layout::linearSiteIndex(crtesn(site+i, Layout::lattSize()));
+		if (lat_color[linear] == color)
+		  {
+		    site_cnt++;
+		  }
+	      }
+	    memcpy(recv_buf_size, (void *)&site_cnt, sizeof(int));
+	  }
 
-      // Only on primary node read the data
-      bin.readArrayPrimaryNode(recv_buf, size, nmemb*site_cnt);
+	if (node != 0)
+	  {
+	    // Send the data size to the primary node.
+	    // We are using the point-to-point version
+	    if (Layout::primaryNode())
+	      {
+		QDPInternal::recvFromWait((void *)recv_buf_size, node, sizeof(int));
+		memcpy((void *)&site_cnt, recv_buf_size, sizeof(int));
+	      }
 
-      // Send result to destination node. Avoid sending prim-node sending to itself
-      if (node != 0)
-      {
+	    if (Layout::nodeNumber() == node)
+	      {
+		QDPInternal::sendToWait((void *)recv_buf_size, 0, sizeof(int));
+	      }
+	  }
+
+	// Only on primary node read the data
+	bin.readArrayPrimaryNode(recv_buf, size, nmemb*site_cnt);
+
+	// Send result to destination node. Avoid sending prim-node sending to itself
+	if (node != 0)
+	  {
 #if 0
-	// All nodes participate
-	// First send the byte size for this 
-	QDP_error_exit("Do not support route in readOLattice(sub)");
+	    // All nodes participate
+	    // First send the byte size for this 
+	    QDP_error_exit("Do not support route in readOLattice(sub)");
 
 #else
-	// We are using the point-to-point version
-	if (Layout::primaryNode())
-	  QDPInternal::sendToWait((void *)recv_buf, node, site_cnt*sizemem);
+	    // We are using the point-to-point version
+	    if (Layout::primaryNode())
+	      QDPInternal::sendToWait((void *)recv_buf, node, site_cnt*sizemem);
+
+	    if (Layout::nodeNumber() == node)
+	      QDPInternal::recvFromWait((void *)recv_buf, 0, site_cnt*sizemem);
+#endif
+	  }
 
 	if (Layout::nodeNumber() == node)
-	  QDPInternal::recvFromWait((void *)recv_buf, 0, site_cnt*sizemem);
-#endif
-      }
-
-      if (Layout::nodeNumber() == node)
-      {
-	for(int i=0,j=0; i < xinc; ++i)
-	{
-	  int linear = Layout::linearSiteIndex(crtesn(site+i, Layout::lattSize()));
-	  if (lat_color[linear] == color)
 	  {
-	    memcpy(input+linear*sizemem, recv_buf+j*sizemem, sizemem);
-	    j++;
+	    for(int i=0,j=0; i < xinc; ++i)
+	      {
+		int linear = Layout::linearSiteIndex(crtesn(site+i, Layout::lattSize()));
+		if (lat_color[linear] == color)
+		  {
+		    memcpy(input+linear*sizemem, recv_buf+j*sizemem, sizemem);
+		    j++;
+		  }
+	      }
 	  }
-	}
       }
-    }
 
     delete[] recv_buf_size;
     delete[] recv_buf;
@@ -902,10 +928,10 @@ namespace QDP {
       const int xinc = Layout::subgridLattSize()[0];
 
       if ((stop_lexico % xinc) != 0)
-      {
-	QDPIO::cerr << __func__ << ": erorr: stop_lexico= " << stop_lexico << "  xinc= " << xinc << std::endl;
-	QDP_abort(1);
-      }
+	{
+	  QDPIO::cerr << __func__ << ": erorr: stop_lexico= " << stop_lexico << "  xinc= " << xinc << std::endl;
+	  QDP_abort(1);
+	}
 
       size_t sizemem = size*nmemb;
       size_t tot_size = sizemem*xinc;
@@ -915,36 +941,36 @@ namespace QDP {
 
       // Find the location of each site and send to primary node
       for (int site=start_lexico; site < stop_lexico; site += xinc)
-      {
-	// first site in each segment uniquely identifies the node
-	int node = Layout::nodeNumber(crtesn(site, Layout::lattSize()));
-
-	// Only on primary node read the data
-	bin.readArrayPrimaryNode(recv_buf, size, nmemb*xinc);
-
-	// Send result to destination node. Avoid sending prim-node sending to itself
-	if (node != 0)
 	{
+	  // first site in each segment uniquely identifies the node
+	  int node = Layout::nodeNumber(crtesn(site, Layout::lattSize()));
+
+	  // Only on primary node read the data
+	  bin.readArrayPrimaryNode(recv_buf, size, nmemb*xinc);
+
+	  // Send result to destination node. Avoid sending prim-node sending to itself
+	  if (node != 0)
+	    {
 #if 1
-	  // All nodes participate
-	  QDPInternal::route((void *)recv_buf, 0, node, tot_size);
+	      // All nodes participate
+	      QDPInternal::route((void *)recv_buf, 0, node, tot_size);
 #else
-	  if (Layout::primaryNode())
-	    QDPInternal::sendToWait((void *)recv_buf, node, tot_size);
-	  if (Layout::nodeNumber() == node)
-	    QDPInternal::recvFromWait((void *)recv_buf, 0, tot_size);
+	      if (Layout::primaryNode())
+		QDPInternal::sendToWait((void *)recv_buf, node, tot_size);
+	      if (Layout::nodeNumber() == node)
+		QDPInternal::recvFromWait((void *)recv_buf, 0, tot_size);
 #endif
-	}
+	    }
 
-	if (Layout::nodeNumber() == node)
-	{
-	  for(int i=0; i < xinc; ++i)
-	  {
-	    int linear = Layout::linearSiteIndex(crtesn(site+i, Layout::lattSize()));
-	    memcpy(input+linear*sizemem, recv_buf+i*sizemem, sizemem);
-	  }
+	  if (Layout::nodeNumber() == node)
+	    {
+	      for(int i=0; i < xinc; ++i)
+		{
+		  int linear = Layout::linearSiteIndex(crtesn(site+i, Layout::lattSize()));
+		  memcpy(input+linear*sizemem, recv_buf+i*sizemem, sizemem);
+		}
+	    }
 	}
-      }
 
       delete[] recv_buf;
     }
@@ -958,10 +984,10 @@ namespace QDP {
       const int xinc = Layout::subgridLattSize()[0];
 
       if ((stop_lexico % xinc) != 0)
-      {
-	QDPIO::cerr << __func__ << ": erorr: stop_lexico= " << stop_lexico << "  xinc= " << xinc << std::endl;
-	QDP_abort(1);
-      }
+	{
+	  QDPIO::cerr << __func__ << ": erorr: stop_lexico= " << stop_lexico << "  xinc= " << xinc << std::endl;
+	  QDP_abort(1);
+	}
 
       size_t sizemem = size*nmemb;
       size_t tot_size = sizemem*xinc;
@@ -973,55 +999,55 @@ namespace QDP {
       int old_node = 0;
 
       for (int site=start_lexico; site < stop_lexico; site += xinc)
-      {
-	// first site in each segment uniquely identifies the node
-	int node = Layout::nodeNumber(crtesn(site, Layout::lattSize()));
-
-	// Send nodes must wait for a ready signal from the master node
-	// to prevent message pileups on the master node
-	if (node != old_node){
-	  // On non-grid machines, use a clear-to-send like protocol
-	  QDPInternal::clearToSend(recv_buf,sizeof(int),node);
-	  old_node = node;}
-    
-	// Copy to buffer: be really careful since max(linear) could vary among nodes
-	if (Layout::nodeNumber() == node){
-	  for(int i=0; i < xinc; ++i){
-	    int linear = Layout::linearSiteIndex(crtesn(site+i, Layout::lattSize()));
-	    memcpy(recv_buf+i*sizemem, output+linear*sizemem, sizemem);
-	  }
-	}
-
-	// Send result to primary node. Avoid sending prim-node sending to itself
-	if (node != 0)
 	{
-#if 1
-	  // All nodes participate
-	  QDPInternal::route((void *)recv_buf, node, 0, tot_size);
-#else
-	  if (Layout::primaryNode())
-	    QDPInternal::recvFromWait((void *)recv_buf, node, tot_size);
-	  if (Layout::nodeNumber() == node)
-	    QDPInternal::sendToWait((void *)recv_buf, 0, tot_size);
-#endif
-	}
+	  // first site in each segment uniquely identifies the node
+	  int node = Layout::nodeNumber(crtesn(site, Layout::lattSize()));
 
-	bin.writeArrayPrimaryNode(recv_buf, size, nmemb*xinc);
-      }
+	  // Send nodes must wait for a ready signal from the master node
+	  // to prevent message pileups on the master node
+	  if (node != old_node){
+	    // On non-grid machines, use a clear-to-send like protocol
+	    QDPInternal::clearToSend(recv_buf,sizeof(int),node);
+	    old_node = node;}
+    
+	  // Copy to buffer: be really careful since max(linear) could vary among nodes
+	  if (Layout::nodeNumber() == node){
+	    for(int i=0; i < xinc; ++i){
+	      int linear = Layout::linearSiteIndex(crtesn(site+i, Layout::lattSize()));
+	      memcpy(recv_buf+i*sizemem, output+linear*sizemem, sizemem);
+	    }
+	  }
+
+	  // Send result to primary node. Avoid sending prim-node sending to itself
+	  if (node != 0)
+	    {
+#if 1
+	      // All nodes participate
+	      QDPInternal::route((void *)recv_buf, node, 0, tot_size);
+#else
+	      if (Layout::primaryNode())
+		QDPInternal::recvFromWait((void *)recv_buf, node, tot_size);
+	      if (Layout::nodeNumber() == node)
+		QDPInternal::sendToWait((void *)recv_buf, 0, tot_size);
+#endif
+	    }
+
+	  bin.writeArrayPrimaryNode(recv_buf, size, nmemb*xinc);
+	}
       delete[] recv_buf;
     }
   }
 
 
-//-----------------------------------------------------------------------
-// Compute simple NERSC-like checksum of a gauge field
-/*
- * \ingroup io
- *
- * \param u          gauge configuration ( Read )
- *
- * \return checksum
- */    
+  //-----------------------------------------------------------------------
+  // Compute simple NERSC-like checksum of a gauge field
+  /*
+   * \ingroup io
+   *
+   * \param u          gauge configuration ( Read )
+   *
+   * \return checksum
+   */    
 
   n_uint32_t computeChecksum(const multi1d<LatticeColorMatrix>& u,
 			     int mat_size)
@@ -1034,10 +1060,10 @@ namespace QDP {
     const int nodeSites = Layout::sitesOnNode();
 
     for(int dd=0; dd<Nd; dd++)        /* dir */
-    {
-      sa[dd].resize(nodeSites);
-      QDP_extract(sa[dd], u[dd], all);
-    }
+      {
+	sa[dd].resize(nodeSites);
+	QDP_extract(sa[dd], u[dd], all);
+      }
 
     char  *chk_buf = new(nothrow) char[su3_size];
     if( chk_buf == 0x0 ) { 
@@ -1045,54 +1071,54 @@ namespace QDP {
     }
 
     for(int linear=0; linear < nodeSites; ++linear)
-    {
-      for(int dd=0; dd<Nd; dd++)        /* dir */
       {
-	switch (mat_size)
-	{
-	case 12:
-	{
-	  REAL32 su3[2][3][2];
+	for(int dd=0; dd<Nd; dd++)        /* dir */
+	  {
+	    switch (mat_size)
+	      {
+	      case 12:
+		{
+		  REAL32 su3[2][3][2];
 
-	  for(int kk=0; kk<Nc; kk++)      /* color */
-	    for(int ii=0; ii<2; ii++)    /* color */
-	    {
-	      Complex sitecomp = peekColor(sa[dd][linear],ii,kk);
-	      su3[ii][kk][0] = toFloat(Real(real(sitecomp)));
-	      su3[ii][kk][1] = toFloat(Real(imag(sitecomp)));
-	    }
+		  for(int kk=0; kk<Nc; kk++)      /* color */
+		    for(int ii=0; ii<2; ii++)    /* color */
+		      {
+			Complex sitecomp = peekColor(sa[dd][linear],ii,kk);
+			su3[ii][kk][0] = toFloat(Real(real(sitecomp)));
+			su3[ii][kk][1] = toFloat(Real(imag(sitecomp)));
+		      }
 
-	  memcpy(chk_buf, &(su3[0][0][0]), su3_size);
-	}
-	break;
+		  memcpy(chk_buf, &(su3[0][0][0]), su3_size);
+		}
+		break;
 
-	case 18:
-	{
-	  REAL32 su3[3][3][2];
+	      case 18:
+		{
+		  REAL32 su3[3][3][2];
 
-	  for(int kk=0; kk<Nc; kk++)      /* color */
-	    for(int ii=0; ii<Nc; ii++)    /* color */
-	    {
-	      Complex sitecomp = peekColor(sa[dd][linear],ii,kk);
-	      su3[ii][kk][0] = toFloat(Real(real(sitecomp)));
-	      su3[ii][kk][1] = toFloat(Real(imag(sitecomp)));
-	    }
+		  for(int kk=0; kk<Nc; kk++)      /* color */
+		    for(int ii=0; ii<Nc; ii++)    /* color */
+		      {
+			Complex sitecomp = peekColor(sa[dd][linear],ii,kk);
+			su3[ii][kk][0] = toFloat(Real(real(sitecomp)));
+			su3[ii][kk][1] = toFloat(Real(imag(sitecomp)));
+		      }
 
-	  memcpy(chk_buf, &(su3[0][0][0]), su3_size);
-	}
-	break;
+		  memcpy(chk_buf, &(su3[0][0][0]), su3_size);
+		}
+		break;
 
-	default:
-	  QDPIO::cerr << __func__ << ": unexpected size" << endl;
-	  QDP_abort(1);
-	}
+	      default:
+		QDPIO::cerr << __func__ << ": unexpected size" << endl;
+		QDP_abort(1);
+	      }
 
-	// Compute checksum
-	n_uint32_t* chk_ptr = (n_uint32_t*)chk_buf;
-	for(unsigned int i=0; i < mat_size*size/sizeof(n_uint32_t); ++i)
-	  checksum += chk_ptr[i];
+	    // Compute checksum
+	    n_uint32_t* chk_ptr = (n_uint32_t*)chk_buf;
+	    for(unsigned int i=0; i < mat_size*size/sizeof(n_uint32_t); ++i)
+	      checksum += chk_ptr[i];
+	  }
       }
-    }
 
     delete[] chk_buf;
 
@@ -1103,15 +1129,15 @@ namespace QDP {
   }
 
 
-//-----------------------------------------------------------------------
-// Read a QCD archive file
-// Read a QCD (NERSC) Archive format gauge field
-/*
- * \ingroup io
- *
- * \param cfg_in     binary writer object ( Modify )
- * \param u          gauge configuration ( Modify )
- */    
+  //-----------------------------------------------------------------------
+  // Read a QCD archive file
+  // Read a QCD (NERSC) Archive format gauge field
+  /*
+   * \ingroup io
+   *
+   * \param cfg_in     binary writer object ( Modify )
+   * \param u          gauge configuration ( Modify )
+   */    
 
   void readArchiv(BinaryReader& cfg_in, multi1d<LatticeColorMatrix>& u, 
 		  n_uint32_t& checksum, int mat_size, int float_size)
@@ -1135,41 +1161,41 @@ namespace QDP {
 
     // Find the location of each site and send to primary node
     for(int site=0; site < Layout::vol(); ++site)
-    {
-      multi1d<int> coord = crtesn(site, Layout::lattSize());
-
-      int node   = Layout::nodeNumber(coord);
-      int linear = Layout::linearSiteIndex(coord);
-
-      // Only on primary node read the data
-      cfg_in.readArrayPrimaryNode(recv_buf, size, mat_size*Nd);
-
-      if (Layout::primaryNode()) 
       {
-	// Compute checksum
-	n_uint32_t* chk_ptr = (n_uint32_t*)recv_buf;
-	for(unsigned int i=0; i < mat_size*Nd*size/sizeof(n_uint32_t); ++i)
-	  checksum += chk_ptr[i];
-      }
+	multi1d<int> coord = crtesn(site, Layout::lattSize());
 
-      // Send result to destination node. Avoid sending prim-node sending to itself
-      if (node != 0)
-      {
+	int node   = Layout::nodeNumber(coord);
+	int linear = Layout::linearSiteIndex(coord);
+
+	// Only on primary node read the data
+	cfg_in.readArrayPrimaryNode(recv_buf, size, mat_size*Nd);
+
+	if (Layout::primaryNode()) 
+	  {
+	    // Compute checksum
+	    n_uint32_t* chk_ptr = (n_uint32_t*)recv_buf;
+	    for(unsigned int i=0; i < mat_size*Nd*size/sizeof(n_uint32_t); ++i)
+	      checksum += chk_ptr[i];
+	  }
+
+	// Send result to destination node. Avoid sending prim-node sending to itself
+	if (node != 0)
+	  {
 #if 1
-	// All nodes participate
-	QDPInternal::route((void *)recv_buf, 0, node, tot_size);
+	    // All nodes participate
+	    QDPInternal::route((void *)recv_buf, 0, node, tot_size);
 #else
-	if (Layout::primaryNode())
-	  QDPInternal::sendToWait((void *)recv_buf, node, tot_size);
+	    if (Layout::primaryNode())
+	      QDPInternal::sendToWait((void *)recv_buf, node, tot_size);
+
+	    if (Layout::nodeNumber() == node)
+	      QDPInternal::recvFromWait((void *)recv_buf, 0, tot_size);
+#endif
+	  }
 
 	if (Layout::nodeNumber() == node)
-	  QDPInternal::recvFromWait((void *)recv_buf, 0, tot_size);
-#endif
+	  memcpy(input+linear*tot_size, recv_buf, tot_size);
       }
-
-      if (Layout::nodeNumber() == node)
-	memcpy(input+linear*tot_size, recv_buf, tot_size);
-    }
 
     delete[] recv_buf;
 
@@ -1180,78 +1206,78 @@ namespace QDP {
     REAL su3[3][3][2];
 
     for(int linear=0; linear < nodeSites; ++linear)
-    {
-      for(int dd=0; dd<Nd; dd++)        /* dir */
       {
-	// Transfer the data from input into SU3
-	if (float_size == 4) 
-	{
-	  REAL* su3_p = (REAL *)su3;
-	  REAL32* input_p = (REAL32 *)( input+su3_size*(dd+Nd*linear) );
-	  for(int cp_index=0; cp_index < mat_size; cp_index++) {
-	    su3_p[cp_index] = (REAL)(input_p[cp_index]);
-	  }
-	}
-	else if (float_size == 8) 
-	{
-	  // IEEE64BIT case
-	  REAL *su3_p = (REAL *)su3;
-	  REAL64 *input_p = (REAL64 *)( input+su3_size*(dd+Nd*linear) );
-	  for(int cp_index=0; cp_index < mat_size; cp_index++) { 
-	    su3_p[cp_index] = (REAL)input_p[cp_index];
-	  }
-	}
-	else { 
-	  QDPIO::cerr << __func__ << ": Unknown mat size" << endl;
-	  QDP_abort(1);
-	}
-
-	/* Reconstruct the third column  if necessary */
-	if (mat_size == 12) 
-	{
-	  su3[2][0][0] = su3[0][1][0]*su3[1][2][0] - su3[0][1][1]*su3[1][2][1]
-	    - su3[0][2][0]*su3[1][1][0] + su3[0][2][1]*su3[1][1][1];
-	  su3[2][0][1] = su3[0][2][0]*su3[1][1][1] + su3[0][2][1]*su3[1][1][0]
-	    - su3[0][1][0]*su3[1][2][1] - su3[0][1][1]*su3[1][2][0];
-
-	  su3[2][1][0] = su3[0][2][0]*su3[1][0][0] - su3[0][2][1]*su3[1][0][1]
-	    - su3[0][0][0]*su3[1][2][0] + su3[0][0][1]*su3[1][2][1];
-	  su3[2][1][1] = su3[0][0][0]*su3[1][2][1] + su3[0][0][1]*su3[1][2][0]
-	    - su3[0][2][0]*su3[1][0][1] - su3[0][2][1]*su3[1][0][0];
-          
-	  su3[2][2][0] = su3[0][0][0]*su3[1][1][0] - su3[0][0][1]*su3[1][1][1]
-	    - su3[0][1][0]*su3[1][0][0] + su3[0][1][1]*su3[1][0][1];
-	  su3[2][2][1] = su3[0][1][0]*su3[1][0][1] + su3[0][1][1]*su3[1][0][0]
-	    - su3[0][0][0]*su3[1][1][1] - su3[0][0][1]*su3[1][1][0];
-	}
-
-	/* Copy into the big array */
-	for(int kk=0; kk<Nc; kk++)      /* color */
-	{
-	  for(int ii=0; ii<Nc; ii++)    /* color */
+	for(int dd=0; dd<Nd; dd++)        /* dir */
 	  {
-	    Complex sitecomp = cmplx(Real(su3[ii][kk][0]), Real(su3[ii][kk][1]));
-	    pokeColor(sitefield,sitecomp,ii,kk);
-	  }
-	}
+	    // Transfer the data from input into SU3
+	    if (float_size == 4) 
+	      {
+		REAL* su3_p = (REAL *)su3;
+		REAL32* input_p = (REAL32 *)( input+su3_size*(dd+Nd*linear) );
+		for(int cp_index=0; cp_index < mat_size; cp_index++) {
+		  su3_p[cp_index] = (REAL)(input_p[cp_index]);
+		}
+	      }
+	    else if (float_size == 8) 
+	      {
+		// IEEE64BIT case
+		REAL *su3_p = (REAL *)su3;
+		REAL64 *input_p = (REAL64 *)( input+su3_size*(dd+Nd*linear) );
+		for(int cp_index=0; cp_index < mat_size; cp_index++) { 
+		  su3_p[cp_index] = (REAL)input_p[cp_index];
+		}
+	      }
+	    else { 
+	      QDPIO::cerr << __func__ << ": Unknown mat size" << endl;
+	      QDP_abort(1);
+	    }
+
+	    /* Reconstruct the third column  if necessary */
+	    if (mat_size == 12) 
+	      {
+		su3[2][0][0] = su3[0][1][0]*su3[1][2][0] - su3[0][1][1]*su3[1][2][1]
+		  - su3[0][2][0]*su3[1][1][0] + su3[0][2][1]*su3[1][1][1];
+		su3[2][0][1] = su3[0][2][0]*su3[1][1][1] + su3[0][2][1]*su3[1][1][0]
+		  - su3[0][1][0]*su3[1][2][1] - su3[0][1][1]*su3[1][2][0];
+
+		su3[2][1][0] = su3[0][2][0]*su3[1][0][0] - su3[0][2][1]*su3[1][0][1]
+		  - su3[0][0][0]*su3[1][2][0] + su3[0][0][1]*su3[1][2][1];
+		su3[2][1][1] = su3[0][0][0]*su3[1][2][1] + su3[0][0][1]*su3[1][2][0]
+		  - su3[0][2][0]*su3[1][0][1] - su3[0][2][1]*su3[1][0][0];
+          
+		su3[2][2][0] = su3[0][0][0]*su3[1][1][0] - su3[0][0][1]*su3[1][1][1]
+		  - su3[0][1][0]*su3[1][0][0] + su3[0][1][1]*su3[1][0][1];
+		su3[2][2][1] = su3[0][1][0]*su3[1][0][1] + su3[0][1][1]*su3[1][0][0]
+		  - su3[0][0][0]*su3[1][1][1] - su3[0][0][1]*su3[1][1][0];
+	      }
+
+	    /* Copy into the big array */
+	    for(int kk=0; kk<Nc; kk++)      /* color */
+	      {
+		for(int ii=0; ii<Nc; ii++)    /* color */
+		  {
+		    Complex sitecomp = cmplx(Real(su3[ii][kk][0]), Real(su3[ii][kk][1]));
+		    pokeColor(sitefield,sitecomp,ii,kk);
+		  }
+	      }
       
-	u[dd].elem(linear) = sitefield.elem();
+	    u[dd].elem(linear) = sitefield.elem();
+	  }
       }
-    }
   
     delete[] input;
   }
 
 
-//-----------------------------------------------------------------------
-// Write a QCD archive file
-// Write a QCD (NERSC) Archive format gauge field
-/*
- * \ingroup io
- *
- * \param cfg_out    binary writer object ( Modify )
- * \param u          gauge configuration ( Read )
- */    
+  //-----------------------------------------------------------------------
+  // Write a QCD archive file
+  // Write a QCD (NERSC) Archive format gauge field
+  /*
+   * \ingroup io
+   *
+   * \param cfg_out    binary writer object ( Modify )
+   * \param u          gauge configuration ( Read )
+   */    
   void writeArchiv(BinaryWriter& cfg_out, const multi1d<LatticeColorMatrix>& u,
 		   int mat_size)
   {
@@ -1268,84 +1294,86 @@ namespace QDP {
     multi1d<multi1d<ColorMatrix> > sa(Nd);   // extract gauge fields
 
     for(int dd=0; dd<Nd; dd++)        /* dir */
-    {
-      sa[dd].resize(nodeSites);
-      QDP_extract(sa[dd], u[dd], all);
-    }
+      {
+	sa[dd].resize(nodeSites);
+	QDP_extract(sa[dd], u[dd], all);
+      }
 
     // Find the location of each site and send to primary node
     for(int site=0; site < Layout::vol(); ++site)
-    {
-      multi1d<int> coord = crtesn(site, Layout::lattSize());
-
-      int node   = Layout::nodeNumber(coord);
-      int linear = Layout::linearSiteIndex(coord);
-
-      // Copy to buffer: be really careful since max(linear) could vary among nodes
-      if (Layout::nodeNumber() == node)
       {
-	char *recv_buf_tmp = recv_buf;
+	multi1d<int> coord = crtesn(site, Layout::lattSize());
 
-	for(int dd=0; dd<Nd; dd++)        /* dir */
-	{
-	  if ( mat_size == 12 ) 
-	  {
-	    REAL32 su3[2][3][2];
+	int node   = Layout::nodeNumber(coord);
+	int linear = Layout::linearSiteIndex(coord);
 
-	    for(int kk=0; kk<Nc; kk++)      /* color */
-	      for(int ii=0; ii<2; ii++)    /* color */
-	      {
-		Complex sitecomp = peekColor(sa[dd][linear],ii,kk);
-		su3[ii][kk][0] = toFloat(Real(real(sitecomp)));
-		su3[ii][kk][1] = toFloat(Real(imag(sitecomp)));
-	      }
-
-	    memcpy(recv_buf_tmp, &(su3[0][0][0]), su3_size);
-	  }
-	  else
-	  {
-	    REAL32 su3[3][3][2];
-
-	    for(int kk=0; kk<Nc; kk++)      /* color */
-	      for(int ii=0; ii<Nc; ii++)    /* color */
-	      {
-		Complex sitecomp = peekColor(sa[dd][linear],ii,kk);
-		su3[ii][kk][0] = toFloat(Real(real(sitecomp)));
-		su3[ii][kk][1] = toFloat(Real(imag(sitecomp)));
-	      }
-
-	    memcpy(recv_buf_tmp, &(su3[0][0][0]), su3_size);
-	  }
-
-	  recv_buf_tmp += su3_size;
-	}
-      }
-
-      // Send result to primary node. Avoid sending prim-node sending to itself
-      if (node != 0)
-      {
-#if 1
-	// All nodes participate
-	QDPInternal::route((void *)recv_buf, node, 0, tot_size);
-#else
-	if (Layout::primaryNode())
-	  QDPInternal::recvFromWait((void *)recv_buf, node, tot_size);
-
+	// Copy to buffer: be really careful since max(linear) could vary among nodes
 	if (Layout::nodeNumber() == node)
-	  QDPInternal::sendToWait((void *)recv_buf, 0, tot_size);
-#endif
-      }
+	  {
+	    char *recv_buf_tmp = recv_buf;
 
-      cfg_out.writeArrayPrimaryNode(recv_buf, size, mat_size*Nd);
-    }
+	    for(int dd=0; dd<Nd; dd++)        /* dir */
+	      {
+		if ( mat_size == 12 ) 
+		  {
+		    REAL32 su3[2][3][2];
+
+		    for(int kk=0; kk<Nc; kk++)      /* color */
+		      for(int ii=0; ii<2; ii++)    /* color */
+			{
+			  Complex sitecomp = peekColor(sa[dd][linear],ii,kk);
+			  su3[ii][kk][0] = toFloat(Real(real(sitecomp)));
+			  su3[ii][kk][1] = toFloat(Real(imag(sitecomp)));
+			}
+
+		    memcpy(recv_buf_tmp, &(su3[0][0][0]), su3_size);
+		  }
+		else
+		  {
+		    REAL32 su3[3][3][2];
+
+		    for(int kk=0; kk<Nc; kk++)      /* color */
+		      for(int ii=0; ii<Nc; ii++)    /* color */
+			{
+			  Complex sitecomp = peekColor(sa[dd][linear],ii,kk);
+			  su3[ii][kk][0] = toFloat(Real(real(sitecomp)));
+			  su3[ii][kk][1] = toFloat(Real(imag(sitecomp)));
+			}
+
+		    memcpy(recv_buf_tmp, &(su3[0][0][0]), su3_size);
+		  }
+
+		recv_buf_tmp += su3_size;
+	      }
+	  }
+
+	// Send result to primary node. Avoid sending prim-node sending to itself
+	if (node != 0)
+	  {
+#if 1
+	    // All nodes participate
+	    QDPInternal::route((void *)recv_buf, node, 0, tot_size);
+#else
+	    if (Layout::primaryNode())
+	      QDPInternal::recvFromWait((void *)recv_buf, node, tot_size);
+
+	    if (Layout::nodeNumber() == node)
+	      QDPInternal::sendToWait((void *)recv_buf, 0, tot_size);
+#endif
+	  }
+
+	cfg_out.writeArrayPrimaryNode(recv_buf, size, mat_size*Nd);
+      }
 
     delete[] recv_buf;
 
     if (cfg_out.fail())
-    {
-      QDPIO::cerr << __func__ << ": error writing configuration" << endl;
-      QDP_abort(1);
-    }
+      {
+	QDPIO::cerr << __func__ << ": error writing configuration" << endl;
+	QDP_abort(1);
+      }
   }
+
+  
 
 } // namespace QDP;

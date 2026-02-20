@@ -32,6 +32,13 @@ public:
 	this->elem(i,q).setup( j.elem(i,q) );
   }
 
+  void setup_value( const typename JITType< PColorMatrixREG >::Type_t& j ) {
+    for (int i = 0 ; i < N ; i++ ) 
+      for (int q = 0 ; q < N ; q++ ) 
+	this->elem(i,q).setup_value( j.elem(i,q) );
+  }
+
+  
   PColorMatrixREG() {}
 
   PColorMatrixREG( const typename JITType< PColorMatrixREG >::Type_t& rhs ) {
@@ -78,6 +85,14 @@ public:
 // Traits classes 
 //-----------------------------------------------------------------------------
 
+
+  template <class T, int N>
+  struct IsWordVec< PColorMatrixREG<T,N > >
+  {
+    constexpr static bool value = IsWordVec<T>::value;
+  };
+
+  
   template <class T, int N>
   struct JITType< PColorMatrixREG<T,N> >
   {
@@ -309,6 +324,30 @@ struct BinaryReturn<PScalarREG<T1>, PColorMatrixREG<T2,N>, FnLocalInnerProductRe
 
 
 
+template<class T1, int N>
+struct UnaryReturn<PColorMatrixREG<T1,N>, FnIsFinite> {
+  typedef PScalarREG< typename UnaryReturn<T1, FnIsFinite >::Type_t > Type_t;
+};
+
+
+template<class T1, int N>
+inline typename UnaryReturn<PColorMatrixREG<T1,N>, FnIsFinite>::Type_t
+isfinite(const PColorMatrixREG<T1,N>& l)
+{
+  typedef typename UnaryReturn<PColorMatrixREG<T1,N>, FnIsFinite>::Type_t Ret_t;
+  Ret_t d(true);
+
+  for(int i=0; i < N; ++i)
+    for(int j=0; j < N; ++j)
+      d.elem() &= isfinite(l.elem(i,j));
+
+  return d;
+}
+
+
+
+
+
 //-----------------------------------------------------------------------------
 // Operators
 //-----------------------------------------------------------------------------
@@ -470,8 +509,12 @@ peekColor(const PColorMatrixREG<T,N>& l, llvm::Value* row, llvm::Value* col)
 
   typedef typename JITType< PColorMatrixREG<T,N> >::Type_t TTjit;
 
-  llvm::Value* ptr_local = llvm_alloca( llvm_type<typename WordType<T>::Type_t>::value , TTjit::Size_t );
-
+  llvm::Value* ptr_local;
+  if (IsWordVec<T>::value)
+    ptr_local = llvm_alloca( llvm_get_vectype<typename WordType<T>::Type_t>() , TTjit::ScalarSize_t );
+  else
+    ptr_local = llvm_alloca( llvm_get_type<typename WordType<T>::Type_t>() , TTjit::ScalarSize_t );
+  
   TTjit dj;
   dj.setup( ptr_local, JitDeviceLayout::Scalar );
   dj=l;
@@ -479,6 +522,11 @@ peekColor(const PColorMatrixREG<T,N>& l, llvm::Value* row, llvm::Value* col)
   d.elem() = dj.getRegElem(row,col);
   return d;
 }
+
+
+
+
+
 
 //! Insert color matrix components
 template<class T1, class T2, int N>
@@ -646,6 +694,7 @@ inline typename BinaryReturn<PColorMatrixREG<T1,3>, PColorMatrixREG<T2,3>, FnQua
 quarkContractXX(const PColorMatrixREG<T1,3>& s1, const PColorMatrixREG<T2,3>& s2)
 {
   typename BinaryReturn<PColorMatrixREG<T1,3>, PColorMatrixREG<T2,3>, FnQuarkContractXX>::Type_t  d;
+#if 1
 
   // Permutations: +(0,1,2)+(1,2,0)+(2,0,1)-(1,0,2)-(0,2,1)-(2,1,0)
 
@@ -720,7 +769,36 @@ quarkContractXX(const PColorMatrixREG<T1,3>& s1, const PColorMatrixREG<T2,3>& s2
               - s1.elem(0,1)*s2.elem(1,0)
               - s1.elem(1,0)*s2.elem(0,1)
               + s1.elem(1,1)*s2.elem(0,0);
+#else
+  
+  typedef typename BinaryReturn<PColorMatrixREG<T1,3>, PColorMatrixREG<T2,3>, FnQuarkContractXX>::Type_t::Sub_t  T_return;
 
+  JitStackMatrix< T1 , 3 > s1_a( s1 );
+  JitStackMatrix< T2 , 3 > s2_a( s2 );
+  JitStackMatrix< T_return , 3 > d_a;
+
+  JitForLoop loop_j(0,3);
+  JitForLoop loop_i(0,3);
+
+  d_a.elemJIT( loop_i.index() , loop_j.index() ) =
+				   s1_a.elemREG( llvm_epsilon_1st( 1 , loop_j.index() ) , llvm_epsilon_2nd( 1 , loop_i.index() ) ) *
+				   s2_a.elemREG( llvm_epsilon_1st( 2 , loop_j.index() ) , llvm_epsilon_2nd( 2 , loop_i.index() ) )
+				 - s1_a.elemREG( llvm_epsilon_1st( 1 , loop_j.index() ) , llvm_epsilon_2nd( 2 , loop_i.index() ) ) *
+				   s2_a.elemREG( llvm_epsilon_1st( 2 , loop_j.index() ) , llvm_epsilon_2nd( 1 , loop_i.index() ) )
+				 - s1_a.elemREG( llvm_epsilon_1st( 2 , loop_j.index() ) , llvm_epsilon_2nd( 1 , loop_i.index() ) ) *
+				   s2_a.elemREG( llvm_epsilon_1st( 1 , loop_j.index() ) , llvm_epsilon_2nd( 2 , loop_i.index() ) )
+				 + s1_a.elemREG( llvm_epsilon_1st( 2 , loop_j.index() ) , llvm_epsilon_2nd( 2 , loop_i.index() ) ) *
+      				   s2_a.elemREG( llvm_epsilon_1st( 1 , loop_j.index() ) , llvm_epsilon_2nd( 1 , loop_i.index() ) );
+				 
+  loop_i.end();
+  loop_j.end();
+
+  for(int i=0; i < 3; ++i)
+    for(int j=0; j < 3; ++j)
+      d.elem(i,j).setup( d_a.elemJIT(i,j) );
+
+
+#endif
   return d;
 }
 

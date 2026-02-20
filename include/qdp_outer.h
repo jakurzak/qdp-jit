@@ -29,6 +29,8 @@ namespace QDP {
  * @{
  */
 
+  
+  
 //! Outer grid Scalar class */
 /*! All outer lattices are of OScalar or OLattice type */
   template<class T>
@@ -36,45 +38,40 @@ namespace QDP {
   {
   public:
     typedef T SubType_t;
-
+    
     OScalar(): QDPType<T, OScalar<T> >()
     {
-      if (qdp_stack_scalars_enabled()) {
-	dev_ptr = qdp_stack_scalars_alloc( sizeof(T) );
-	myId = QDP_get_global_cache().add( sizeof(T) ,
-					   QDPCache::Flags::OwnHostMemory | QDPCache::Flags::OwnDeviceMemory ,
-					   qdp_stack_scalars_get_create_status() , 
-					   &F , dev_ptr , NULL );
-      }
+#ifdef QDP_DEEP_LOG
+      zero_rep( elem() );
+#endif
     }
 
-    virtual ~OScalar() {
-      free_mem();
+    ~OScalar() {
     }
 
-
-    OScalar(const typename WordType<T>::Type_t& rhs): QDPType<T, OScalar<T> >()
+    OScalar(const typename WordType<T>::Type_t& rhs)//: QDPType<T, OScalar<T> >()
     {
       typedef typename InternalScalar<T>::Type_t  Scalar_t;
       elem() = Scalar_t(rhs);
     }
 
+    
 
-    OScalar(const Zero& rhs): QDPType<T, OScalar<T> >()
+    OScalar(const Zero& rhs)//: QDPType<T, OScalar<T> >()
     {
       this->assign(rhs);
     }
 
 
     template<class T1>
-    OScalar(const OScalar<T1>& rhs): QDPType<T, OScalar<T> >()
+    OScalar(const OScalar<T1>& rhs)//: QDPType<T, OScalar<T> >()
     {
       this->assign(rhs);
     }
 
 
     template<class RHS, class T1>
-    OScalar(const QDPExpr<RHS, OScalar<T1> >& rhs): QDPType<T, OScalar<T> >()
+    OScalar(const QDPExpr<RHS, OScalar<T1> >& rhs)//: QDPType<T, OScalar<T> >()
     {
       this->assign(rhs);
     }
@@ -113,75 +110,61 @@ namespace QDP {
       return this->assign(rhs);
     }
 
-
-
-    // OSubScalar<T>  operator[](const Subset& s) const
-    // {return OSubScalar<T>(*this,s);}
-
-    // OSubScalar<T> operator[](const Subset& s)
-    // {return OSubScalar<T>(*this,const_cast<Subset&>(s));}
-
-
-
-    OScalar(const OScalar& rhs): QDPType<T, OScalar<T> >()
+    OScalar(const OScalar& rhs)//: QDPType<T, OScalar<T> >()
     {
       this->assign(rhs);
     }
 
+
+    int sizeInWords() const { return sizeof(T)/sizeof(typename WordType<T>::Type_t); }
+    
+    void writeTo(std::ostream& out) const
+    {
+      out.write( (const char*)&F , sizeof(T) );
+    }
+
+    void readFrom(std::istream& in) const
+    {
+      in.read( (char*)&F , sizeof(T) );
+    }
+
+    const typename WordType<T>::Type_t* get_ptr() const
+    {
+      return (const typename WordType<T>::Type_t*)&F;
+    }
+    
+    
   public:
 
-    inline T* getF() const { assert_on_host(); return &F; };
+    const T* getF() const { return &F; };
+    T*       getF()       { return &F; };
 
+    T&       elem()       { return F; }
+    const T& elem() const { return F; }
 
-    inline T& elem() { assert_on_host(); return F;  }
-    inline const T& elem() const { assert_on_host(); return F; }
-    inline T& elem(int i) { assert_on_host(); return F; }
-    inline const T& elem(int i) const { assert_on_host(); return F; }
-
-    int getId() const {       
-      alloc_mem(); 
-      return myId; 
+    
+    typename WordType<T>::Type_t get_word_value() const
+    {
+      typename WordType<T>::Type_t tmp = FirstWord<T>::get(F);
+      return tmp;
     }
 
   private:
-
-    inline void alloc_mem() const {
-      if (myId >= 0)
-	return;
-
-      QDPCache::Status status = accessed_on_host ? QDPCache::Status::host : QDPCache::Status::undef;
-
-      myId = QDP_get_global_cache().add( sizeof(T) , QDPCache::Flags::OwnHostMemory , status , &F , NULL , NULL );
-    }
-    inline void free_mem() {
-      if (myId >= 0)
-	QDP_get_global_cache().signoff( myId );
-    }
-    inline void assert_on_host() const {
-      accessed_on_host = true;
-      
-      if (myId < 0)
-	return;
-      
-      QDP_get_global_cache().assureOnHost( myId );
-    }
-
-    mutable T F;
-    mutable int myId = -1;
-    mutable void* dev_ptr;
-    mutable bool accessed_on_host = false;
+    T F;
   };
 
 
 //! Ascii input
 /*! Treat all istreams here like all nodes can read. To use specialized ones
  *  that can broadcast, use TextReader */
+  
 template<class T>
 istream& operator>>(istream& s, OScalar<T>& d)
 {
   return s >> d.elem();
 }
 
+  
 //! Ascii output
 /*! Treat all ostreams here like all nodes can write. To use specialized ones
  *  that can broadcast, use TextReader */
@@ -281,7 +264,6 @@ inline
 void evaluate(OScalar<T>& dest, const Op& op, const QDPExpr<RHS,OScalar<T1> >& rhs,
 	      const Subset& s)
 {
-  // Subset is not used at this level. It may be needed, though, within an inner operation
   op(dest.elem(), forEach(rhs, ElemLeaf(), OpCombine()));
 }
 #endif
@@ -312,17 +294,19 @@ void evaluate(OScalar<T>& dest, const Op& op, const QDPExpr<RHS,OScalar<T1> >& r
     }
 
 
-    virtual ~OLattice()
+    ~OLattice()
     {
       free_mem();
     }
 
     
-    OLattice( int Id , float f ): myId(Id), mem(false) {}
+    OLattice( int Id , float f ): myId(Id), mem(false)
+    {
+    }
 
 
     template<class T1>
-    OLattice(const OScalar<T1>& rhs): QDPType<T, OLattice<T> >()
+    OLattice(const OScalar<T1>& rhs)//: QDPType<T, OLattice<T> >()
     {
       alloc_mem("construct from OScalar");
       this->assign(rhs);
@@ -330,7 +314,7 @@ void evaluate(OScalar<T>& dest, const Op& op, const QDPExpr<RHS,OScalar<T1> >& r
 
 
     template<class T1>
-    OLattice(const OLattice<T1>& rhs): QDPType<T, OLattice<T> >()
+    OLattice(const OLattice<T1>& rhs)//: QDPType<T, OLattice<T> >()
     {
       alloc_mem("construct from OLattice");
       this->assign(rhs);
@@ -338,14 +322,14 @@ void evaluate(OScalar<T>& dest, const Op& op, const QDPExpr<RHS,OScalar<T1> >& r
 
 
     template<class RHS, class T1>
-    OLattice(const QDPExpr<RHS, OLattice<T1> >& rhs): QDPType<T, OLattice<T> >()
+    OLattice(const QDPExpr<RHS, OLattice<T1> >& rhs)//: QDPType<T, OLattice<T> >()
     {
       alloc_mem("construct from expr");
       this->assign(rhs);
     }
 
 
-    OLattice(const typename WordType<T>::Type_t& rhs): QDPType<T, OLattice<T> >()
+    OLattice(const typename WordType<T>::Type_t& rhs)//: QDPType<T, OLattice<T> >()
     {
       alloc_mem("construct from const");
 
@@ -354,7 +338,7 @@ void evaluate(OScalar<T>& dest, const Op& op, const QDPExpr<RHS,OScalar<T1> >& r
     }
 
 
-    OLattice(const Zero& rhs): QDPType<T, OLattice<T> >()
+    OLattice(const Zero& rhs)//: QDPType<T, OLattice<T> >()
     {
       alloc_mem("construct from zero");
       this->assign(rhs);
@@ -394,7 +378,17 @@ void evaluate(OScalar<T>& dest, const Op& op, const QDPExpr<RHS,OScalar<T1> >& r
     inline
     OLattice& operator=(const OLattice& rhs)
     {
-      return this->assign(rhs);
+#ifdef QDP_DEEP_LOG
+      bool log_status = jit_config_deep_log();
+      if (log_status)
+	jit_config_deep_log_stop();
+#endif
+      this->assign(rhs);
+#ifdef QDP_DEEP_LOG
+      if (log_status)
+	jit_config_deep_log_start();
+#endif
+      return *this;
     }
 
 
@@ -410,30 +404,92 @@ void evaluate(OScalar<T>& dest, const Op& op, const QDPExpr<RHS,OScalar<T1> >& r
     {return OSubLattice<T>(*this,const_cast<Subset&>(s));}
 
 
-    OLattice(const OLattice& rhs): QDPType<T, OLattice<T> >()
+    OLattice(const OLattice& rhs)//: QDPType<T, OLattice<T> >()
     {
+#ifdef QDP_DEEP_LOG
+      bool log_status = jit_config_deep_log();
+      if (log_status)
+	jit_config_deep_log_stop();
+#endif
       alloc_mem("copy");
       this->assign(rhs);
+#ifdef QDP_DEEP_LOG
+      if (log_status)
+	jit_config_deep_log_start();
+#endif
     }
 
 
-    inline T* getF() const { 
+    inline typename ScalarType<T>::Type_t* getF() const { 
       assert_on_host(); 
       return F; 
     }
 
-    inline T& elem(int i) { 
+    inline typename ScalarType<T>::Type_t& elem(int i) { 
       assert_on_host(); 
       return F[i]; 
     }
-    inline const T& elem(int i) const { 
+
+    inline const typename ScalarType<T>::Type_t& elem(int i) const { 
       assert_on_host(); 
       return F[i]; 
     }
 
 
-  inline void moveToFastMemoryHint(bool copy=false) {}
-  inline void revertFromFastMemoryHint(bool copy=false) {}
+    void writeElemTo(int i, std::ostream& out) const
+    {
+      size_t words_T = sizeof(T) / sizeof( typename WordType<T>::Type_t );
+	    
+      typename WordType<T>::Type_t *f;
+      QDP_get_global_cache().getHostPtr( (void**)&f , myId );
+
+      out.write( (const char*)(f + i * words_T) , sizeof(T) );
+    }
+
+
+    void readElemFrom(int i, std::istream& in) const
+    {
+      size_t words_T = sizeof(T) / sizeof( typename WordType<T>::Type_t );
+      
+      typename WordType<T>::Type_t *f;
+      QDP_get_global_cache().getHostPtr( (void**)&f , myId );
+
+      in.read( (char*)(f + i * words_T) , sizeof(T) );
+    }
+
+    
+
+#if defined (QDP_CODEGEN_VECTOR)
+    OScalar< typename ScalarType<T>::Type_t > peekLinearSite(int site) const
+    {
+      OScalar< typename ScalarType<T>::Type_t > ret;
+
+      void* ptr = QDP_get_global_cache().get_dev_ptr( this->getId() );
+
+      typename WordType<T>::Type_t * in_data  = (typename WordType<T>::Type_t *)ptr;
+      typename WordType<T>::Type_t * out_data = (typename WordType<T>::Type_t *)ret.getF();
+      
+      size_t lim_rea = GetLimit<T,2>::Limit_v; //T::ThisSize;
+      size_t lim_col = GetLimit<T,1>::Limit_v; //T::ThisSize;
+      size_t lim_spi = GetLimit<T,0>::Limit_v; //T::ThisSize;
+
+      for ( size_t reality = 0 ; reality < lim_rea ; reality++ ) {
+	for ( size_t color = 0 ; color < lim_col ; color++ ) {
+	  for ( size_t spin = 0 ; spin < lim_spi ; spin++ ) {
+	    size_t hst_idx = (((0)*lim_spi + spin) * lim_col + color ) * lim_rea + reality;
+	    size_t dev_idx = ( ( reality * lim_col + color ) * lim_spi + spin ) * Layout::sitesOnNode() + site;
+	    out_data[hst_idx] = in_data[dev_idx];
+	  }
+	}
+      }
+      return ret;
+    }
+#endif
+    
+
+
+    inline void moveToFastMemoryHint(bool copy=false) {}
+    inline void revertFromFastMemoryHint(bool copy=false) {}
 
 
     void static changeLayout(bool toDev,void * outPtr,void * inPtr)
@@ -462,59 +518,47 @@ void evaluate(OScalar<T>& dest, const Op& op, const QDPExpr<RHS,OScalar<T1> >& r
 	for ( size_t reality = 0 ; reality < lim_rea ; reality++ ) {
 	  for ( size_t color = 0 ; color < lim_col ; color++ ) {
 	    for ( size_t spin = 0 ; spin < lim_spi ; spin++ ) {
-	      size_t hst_idx = 
-		reality + 
-		lim_rea * color +
-		lim_rea * lim_col * spin +
-		lim_rea * lim_col * lim_spi * site;
-	      size_t dev_idx = 
-		site + 
-		Layout::sitesOnNode() * spin +
-		Layout::sitesOnNode() * lim_spi * color +
-		Layout::sitesOnNode() * lim_spi * lim_col * reality;
+	      size_t hst_idx = (((site)*lim_spi + spin) * lim_col + color ) * lim_rea + reality;
+	      size_t dev_idx = ( ( reality * lim_col + color ) * lim_spi + spin ) * Layout::sitesOnNode() + site;
 	      if (toDev)
 		out_data[dev_idx] = in_data[hst_idx];
-	      else {
-		//std::cout << hst_idx  << " <= " << dev_idx << "\n";
+	      else
 		out_data[hst_idx] = in_data[dev_idx];
 	      }
 	    }
 	  }
 	}
-      }
     }
 
     int getId() const {
       return myId;
     }
 
+
   private:
 
-
-    inline void alloc_mem(const char* msg) const {
-      myId = QDP_get_global_cache().registrate( Layout::sitesOnNode() * sizeof(T) , 1 , &changeLayout );
+    inline void alloc_mem(const char* msg) const
+    {
+      myId = QDP_get_global_cache().addLayout( Layout::sitesOnNode() * sizeof(T) , &changeLayout );
       mem = true;
     }
-    inline void free_mem()  { 
+
+    inline void free_mem()
+    { 
       if (myId >= 0 && mem)
 	QDP_get_global_cache().signoff( myId );
       mem = false;
     }
 
-
-
-    inline void assert_on_host() const {
-      // Here or somewhere we sould make sure that 
-      // if the pointer is still valid, we do not too much
+    inline void assert_on_host() const
+    {
       QDP_get_global_cache().getHostPtr( (void**)&F , myId );
     }
 
-  private:
 
-    mutable T *F;
+    mutable typename ScalarType<T>::Type_t *F;
     mutable int myId = -2;
     mutable bool mem = false;       // did this class register the memory?
-
   };
 
 
@@ -572,14 +616,22 @@ struct JITType<OScalar<T> >
 };
 
 
+
+
+
+
+  // ----------------------------------------------
+
+
+  
+
 /*! @} */  // end of group olattice
 
 
 template<class T>
 struct LeafFunctor<OLattice<T>, ParamLeaf>
 {
-  typedef typename JITType< OLattice<T> >::Type_t  TypeA_t;
-  typedef TypeA_t  Type_t;
+  typedef typename JITType< OLattice<T> >::Type_t  Type_t;
   inline static
   Type_t apply(const OLattice<T>& do_not_use, const ParamLeaf& p) 
   {
@@ -591,15 +643,66 @@ struct LeafFunctor<OLattice<T>, ParamLeaf>
 template<class T>
 struct LeafFunctor<OScalar<T>, ParamLeaf>
 {
-  typedef typename JITType< OScalar<T> >::Type_t  TypeA_t;
-  typedef TypeA_t  Type_t;
+  typedef typename JITType< OScalar<T> >::Type_t  Type_t;
   inline static
-  Type_t apply(const OScalar<T>& do_not_use, const ParamLeaf& p) 
+  Type_t apply(const OScalar<T>& a, const ParamLeaf& p)
+  {
+    return Type_t( llvm_add_param< typename WordType<T>::Type_t * >() );
+  }
+};
+
+
+template<class T>
+struct LeafFunctor<OLattice<T>, ParamLeafScalar>
+{
+  typedef typename JITType< OLattice< typename ScalarType<T>::Type_t > >::Type_t  Type_t;
+  inline static
+  Type_t apply(const OLattice<T>& do_not_use, const ParamLeafScalar& p) 
   {
     ParamRef    base_addr = llvm_add_param< typename WordType<T>::Type_t * >();
     return Type_t( base_addr );
   }
 };
+
+template<class T>
+struct LeafFunctor<OScalar<T>, ParamLeafScalar>
+{
+  typedef typename JITType< OScalar<T> >::Type_t  Type_t;
+  inline static
+  Type_t apply(const OScalar<T>& a, const ParamLeafScalar& p)
+  {
+    return Type_t( llvm_add_param< typename WordType<T>::Type_t * >() );
+  }
+};
+
+
+
+template<class T>
+struct LeafFunctor<OScalar< PScalar< PScalar < RScalar< Word< T > > > > >, ParamLeaf>
+{
+  typedef typename JITType< OScalar< PScalar< PScalar < RScalar< Word< T > > > > > >::Type_t  Type_t;
+  inline static
+  Type_t apply(const OScalar< PScalar< PScalar < RScalar< Word< T > > > > >& a, const ParamLeaf& p)
+  {
+    return Type_t( llvm_add_param< T >() );
+  }
+};
+
+template<class T>
+struct LeafFunctor<OScalar< PScalar< PScalar < RScalar< Word< T > > > > >, ParamLeafScalar>
+{
+  typedef typename JITType< OScalar< PScalar< PScalar < RScalar< Word< T > > > > > >::Type_t  Type_t;
+  inline static
+  Type_t apply(const OScalar< PScalar< PScalar < RScalar< Word< T > > > > >& a, const ParamLeafScalar& p)
+  {
+    //QDPIO::cout << "\n\n *** struct LeafFunctor<OScalar< PScalar< PScalar < RScalar< Word< T > > > > >, ParamLeafScalar> \n\n";
+    return Type_t( llvm_add_param< T >() );
+  }
+};
+
+
+
+
 
 
 template<class T>
@@ -609,7 +712,6 @@ struct LeafFunctor<OLattice<T>, AddressLeaf>
   inline static
   Type_t apply(const OLattice<T>& s, const AddressLeaf& p) 
   {
-    //p.setAddr( QDP_get_global_cache().getDevicePtr( s.getId() ) );
     p.setId( s.getId() );
     return 0;
   }
@@ -620,13 +722,42 @@ struct LeafFunctor<OScalar<T>, AddressLeaf>
 {
   typedef int Type_t;
   inline static
-  Type_t apply(const OScalar<T>& s, const AddressLeaf& p) 
+  Type_t apply(const OScalar<T>& s, const AddressLeaf& p)
   {
-    //p.setAddr( QDP_get_global_cache().getDevicePtr( s.getId() ) );
-    p.setId( s.getId() );
+    int id = QDP_get_global_ring_buffer().allocate( sizeof(T) , s.getF() );
+    p.setId( id );
     return 0;
   }
 };
+
+
+template<class T>
+struct LeafFunctor<OScalar< PScalar< PScalar < RScalar< Word< T > > > > >, AddressLeaf>
+{
+  typedef int  Type_t;
+  inline static
+  Type_t apply(const OScalar< PScalar< PScalar < RScalar< Word< T > > > > >& a, const AddressLeaf& p)
+  {
+    p.setLit< T >( a.get_word_value() );
+    return 0;
+  }
+};
+
+
+
+template<class T>
+struct LeafFunctor<OLattice<T>, SelfAssignTag>
+{
+  typedef int Type_t;
+  inline static
+  Type_t apply(const OLattice<T>& a, const SelfAssignTag& p) 
+  {
+    return a.getId() == p.id ? 1:0;
+  }
+};
+
+
+
 
 
 //-----------------------------------------------------------------------------
@@ -637,7 +768,7 @@ struct LeafFunctor<OScalar<T>, AddressLeaf>
 template<class T>
 struct CreateLeaf<OScalar<T> >
 {
-//  typedef OScalar<T> Leaf_t;
+  //typedef OScalar<T> Leaf_t;
   typedef Reference<OScalar<T> > Leaf_t;
   inline static
   Leaf_t make(const OScalar<T> &a) { return Leaf_t(a); }
@@ -666,6 +797,7 @@ struct LeafFunctor<OScalar<T>, ElemLeaf>
   inline static Type_t apply(const OScalar<T> &a, const ElemLeaf &f)
     {return Type_t(a.elem());}
 };
+
 
 template<class T>
 struct LeafFunctor<OScalar<T>, EvalLeaf1>
@@ -925,52 +1057,38 @@ struct BinaryReturn<OScalar<T1>, OScalar<T2>, FnLocalInnerProduct > {
 };
 
 template<class T1, class T2>
+struct BinaryReturn<OScalar<T1>, OScalar<T2>, FnLocalColorInnerProduct > {
+  typedef OScalar<typename BinaryReturn<T1, T2, FnLocalColorInnerProduct>::Type_t>  Type_t;
+};
+
+template<class T1, class T2>
 struct BinaryReturn<OScalar<T1>, OScalar<T2>, FnLocalInnerProductReal > {
   typedef OScalar<typename BinaryReturn<T1, T2, FnLocalInnerProductReal>::Type_t>  Type_t;
 };
 
 
-// Gamma algebra
-template<int N, int m, class T2, class OpGammaConstMultiply>
-struct BinaryReturn<GammaConst<N,m>, OScalar<T2>, OpGammaConstMultiply> {
-  typedef OScalar<typename UnaryReturn<T2, OpUnaryPlus>::Type_t>  Type_t;
-};
 
-template<class T2, int N, int m, class OpMultiplyGammaConst>
-struct BinaryReturn<OScalar<T2>, GammaConst<N,m>, OpMultiplyGammaConst> {
-  typedef OScalar<typename UnaryReturn<T2, OpUnaryPlus>::Type_t>  Type_t;
-};
-
-template<class T2, int N, class OpGammaTypeMultiply>
+template<class T2, int N>
 struct BinaryReturn<GammaType<N>, OScalar<T2>, OpGammaTypeMultiply> {
   typedef OScalar<typename UnaryReturn<T2, OpUnaryPlus>::Type_t>  Type_t;
 };
 
-template<class T2, int N, class OpMultiplyGammaType>
+template<class T2, int N>
 struct BinaryReturn<OScalar<T2>, GammaType<N>, OpMultiplyGammaType> {
   typedef OScalar<typename UnaryReturn<T2, OpUnaryPlus>::Type_t>  Type_t;
 };
 
-// Gamma algebra
-template<int N, int m, class T2, class OpGammaConstDPMultiply>
-struct BinaryReturn<GammaConstDP<N,m>, OScalar<T2>, OpGammaConstDPMultiply> {
+
+template<class T2, int N>
+struct BinaryReturn<GammaTypeDP<N>, OScalar<T2>, OpGammaTypeMultiply> {
   typedef OScalar<typename UnaryReturn<T2, OpUnaryPlus>::Type_t>  Type_t;
 };
 
-template<class T2, int N, int m, class OpMultiplyGammaConstDP>
-struct BinaryReturn<OScalar<T2>, GammaConstDP<N,m>, OpMultiplyGammaConstDP> {
+template<class T2, int N>
+struct BinaryReturn<OScalar<T2>, GammaTypeDP<N>, OpMultiplyGammaType> {
   typedef OScalar<typename UnaryReturn<T2, OpUnaryPlus>::Type_t>  Type_t;
 };
 
-template<class T2, int N, class OpGammaTypeDPMultiply>
-struct BinaryReturn<GammaTypeDP<N>, OScalar<T2>, OpGammaTypeDPMultiply> {
-  typedef OScalar<typename UnaryReturn<T2, OpUnaryPlus>::Type_t>  Type_t;
-};
-
-template<class T2, int N, class OpMultiplyGammaTypeDP>
-struct BinaryReturn<OScalar<T2>, GammaTypeDP<N>, OpMultiplyGammaTypeDP> {
-  typedef OScalar<typename UnaryReturn<T2, OpUnaryPlus>::Type_t>  Type_t;
-};
 
 
 
@@ -1109,37 +1227,37 @@ struct UnaryReturn<OLattice<T>, FnPeekSite> {
 
 template<class T>
 struct UnaryReturn<OLattice<T>, FnSum > {
-  typedef OScalar<typename UnaryReturn<T, FnSum>::Type_t>  Type_t;
+  typedef OScalar<typename ScalarType< typename UnaryReturn<T, FnSum>::Type_t >::Type_t >  Type_t;
 };
 
 template<class T>
 struct UnaryReturn<OLattice<T>, FnGlobalMax> {
-  typedef OScalar<typename UnaryReturn<T, FnGlobalMax>::Type_t>  Type_t;
+  typedef OScalar<typename ScalarType< typename UnaryReturn<T, FnGlobalMax>::Type_t >::Type_t >  Type_t;
 };
 
 template<class T>
 struct UnaryReturn<OLattice<T>, FnGlobalMin> {
-  typedef OScalar<typename UnaryReturn<T, FnGlobalMin>::Type_t>  Type_t;
+  typedef OScalar<typename ScalarType< typename UnaryReturn<T, FnGlobalMin>::Type_t >::Type_t >  Type_t;
 };
 
 template<class T>
 struct UnaryReturn<OLattice<T>, FnSumMulti > {
-  typedef multi1d<OScalar<typename UnaryReturn<T, FnSumMulti>::Type_t> >  Type_t;
+  typedef multi1d<OScalar<typename ScalarType< typename UnaryReturn<T, FnSumMulti>::Type_t>::Type_t > >  Type_t;
 };
 
 template<class T>
 struct UnaryReturn<OLattice<T>, FnNorm2 > {
-  typedef OScalar<typename UnaryReturn<T, FnNorm2>::Type_t>  Type_t;
+  typedef OScalar<typename ScalarType< typename UnaryReturn<T, FnNorm2>::Type_t>::Type_t >  Type_t;
 };
 
 template<class T1, class T2>
 struct BinaryReturn<OLattice<T1>, OLattice<T2>, FnInnerProduct > {
-  typedef OScalar<typename BinaryReturn<T1, T2, FnInnerProduct>::Type_t>  Type_t;
+  typedef OScalar<typename ScalarType< typename BinaryReturn<T1, T2, FnInnerProduct>::Type_t>::Type_t >  Type_t;
 };
 
 template<class T1, class T2>
 struct BinaryReturn<OLattice<T1>, OLattice<T2>, FnInnerProductReal > {
-  typedef OScalar<typename BinaryReturn<T1, T2, FnInnerProductReal>::Type_t>  Type_t;
+  typedef OScalar<typename ScalarType< typename BinaryReturn<T1, T2, FnInnerProductReal>::Type_t>::Type_t >  Type_t;
 };
 
 template<class T>
@@ -1153,53 +1271,37 @@ struct BinaryReturn<OLattice<T1>, OLattice<T2>, FnLocalInnerProduct > {
 };
 
 template<class T1, class T2>
+struct BinaryReturn<OLattice<T1>, OLattice<T2>, FnLocalColorInnerProduct > {
+  typedef OLattice<typename BinaryReturn<T1, T2, FnLocalColorInnerProduct>::Type_t>  Type_t;
+};
+
+template<class T1, class T2>
 struct BinaryReturn<OLattice<T1>, OLattice<T2>, FnLocalInnerProductReal > {
   typedef OLattice<typename BinaryReturn<T1, T2, FnLocalInnerProductReal>::Type_t>  Type_t;
 };
 
 
-// Gamma algebra
-template<int N, int m, class T2, class OpGammaConstMultiply>
-struct BinaryReturn<GammaConst<N,m>, OLattice<T2>, OpGammaConstMultiply> {
-  typedef OLattice<typename UnaryReturn<T2, OpUnaryPlus>::Type_t>  Type_t;
-};
 
-template<class T2, int N, int m, class OpMultiplyGammaConst>
-struct BinaryReturn<OLattice<T2>, GammaConst<N,m>, OpMultiplyGammaConst> {
-  typedef OLattice<typename UnaryReturn<T2, OpUnaryPlus>::Type_t>  Type_t;
-};
-
-template<class T2, int N, class OpGammaTypeMultiply>
+template<class T2, int N>
 struct BinaryReturn<GammaType<N>, OLattice<T2>, OpGammaTypeMultiply> {
   typedef OLattice<typename UnaryReturn<T2, OpUnaryPlus>::Type_t>  Type_t;
 };
 
-template<class T2, int N, class OpMultiplyGammaType>
+template<class T2, int N>
 struct BinaryReturn<OLattice<T2>, GammaType<N>, OpMultiplyGammaType> {
   typedef OLattice<typename UnaryReturn<T2, OpUnaryPlus>::Type_t>  Type_t;
 };
 
-
-// Gamma algebra
-template<int N, int m, class T2, class OpGammaConstDPMultiply>
-struct BinaryReturn<GammaConstDP<N,m>, OLattice<T2>, OpGammaConstDPMultiply> {
+template<class T2, int N>
+struct BinaryReturn<GammaTypeDP<N>, OLattice<T2>, OpGammaTypeMultiply> {
   typedef OLattice<typename UnaryReturn<T2, OpUnaryPlus>::Type_t>  Type_t;
 };
 
-template<class T2, int N, int m, class OpMultiplyGammaConstDP>
-struct BinaryReturn<OLattice<T2>, GammaConstDP<N,m>, OpMultiplyGammaConstDP> {
+template<class T2, int N>
+struct BinaryReturn<OLattice<T2>, GammaTypeDP<N>, OpMultiplyGammaType> {
   typedef OLattice<typename UnaryReturn<T2, OpUnaryPlus>::Type_t>  Type_t;
 };
 
-template<class T2, int N, class OpGammaTypeDPMultiply>
-struct BinaryReturn<GammaTypeDP<N>, OLattice<T2>, OpGammaTypeDPMultiply> {
-  typedef OLattice<typename UnaryReturn<T2, OpUnaryPlus>::Type_t>  Type_t;
-};
-
-template<class T2, int N, class OpMultiplyGammaTypeDP>
-struct BinaryReturn<OLattice<T2>, GammaTypeDP<N>, OpMultiplyGammaTypeDP> {
-  typedef OLattice<typename UnaryReturn<T2, OpUnaryPlus>::Type_t>  Type_t;
-};
 
 
 
@@ -1209,14 +1311,6 @@ struct UnaryReturn<OLattice<T>, OpNot > {
   typedef OLattice<typename UnaryReturn<T, OpNot>::Type_t>  Type_t;
 };
 
-
-#if 0
-template<class T1, class T2>
-struct UnaryReturn<OLattice<T2>, OpCast<T1> > {
-  typedef OLattice<typename UnaryReturn<T, OpCast>::Type_t>  Type_t;
-//  typedef T1 Type_t;
-};
-#endif
 
 template<class T1, class T2 >
 struct BinaryReturn<OLattice<T1>, OLattice<T2>, OpLT > {
@@ -1329,28 +1423,33 @@ struct TrinaryReturn<OLattice<T1>, OLattice<T2>, OLattice<T3>, FnColorContract> 
 // Global operations
 template<class T1, class T2>
 struct BinaryReturn<OLattice<T1>, OScalar<T2>, FnInnerProduct > {
-  typedef OScalar<typename BinaryReturn<T1, T2, FnInnerProduct>::Type_t>  Type_t;
+  typedef OScalar<typename ScalarType<typename BinaryReturn<T1, T2, FnInnerProduct>::Type_t>::Type_t>  Type_t;
 };
 
 template<class T1, class T2>
 struct BinaryReturn<OLattice<T1>, OScalar<T2>, FnInnerProductReal > {
-  typedef OScalar<typename BinaryReturn<T1, T2, FnInnerProductReal>::Type_t>  Type_t;
+  typedef OScalar<typename ScalarType<typename BinaryReturn<T1, T2, FnInnerProductReal>::Type_t>::Type_t>  Type_t;
 };
 
 template<class T1, class T2>
 struct BinaryReturn<OScalar<T1>, OLattice<T2>, FnInnerProduct > {
-  typedef OScalar<typename BinaryReturn<T1, T2, FnInnerProduct>::Type_t>  Type_t;
+  typedef OScalar<typename ScalarType<typename BinaryReturn<T1, T2, FnInnerProduct>::Type_t>::Type_t>  Type_t;
 };
 
 template<class T1, class T2>
 struct BinaryReturn<OScalar<T1>, OLattice<T2>, FnInnerProductReal > {
-  typedef OScalar<typename BinaryReturn<T1, T2, FnInnerProductReal>::Type_t>  Type_t;
+  typedef OScalar<typename ScalarType<typename BinaryReturn<T1, T2, FnInnerProductReal>::Type_t>::Type_t>  Type_t;
 };
 
 
 template<class T1, class T2>
 struct BinaryReturn<OLattice<T1>, OScalar<T2>, FnLocalInnerProduct > {
   typedef OLattice<typename BinaryReturn<T1, T2, FnLocalInnerProduct>::Type_t>  Type_t;
+};
+
+template<class T1, class T2>
+struct BinaryReturn<OLattice<T1>, OScalar<T2>, FnLocalColorInnerProduct > {
+  typedef OLattice<typename BinaryReturn<T1, T2, FnLocalColorInnerProduct>::Type_t>  Type_t;
 };
 
 template<class T1, class T2>
@@ -1361,6 +1460,11 @@ struct BinaryReturn<OLattice<T1>, OScalar<T2>, FnLocalInnerProductReal > {
 template<class T1, class T2>
 struct BinaryReturn<OScalar<T1>, OLattice<T2>, FnLocalInnerProduct > {
   typedef OLattice<typename BinaryReturn<T1, T2, FnLocalInnerProduct>::Type_t>  Type_t;
+};
+
+template<class T1, class T2>
+struct BinaryReturn<OScalar<T1>, OLattice<T2>, FnLocalColorInnerProduct > {
+  typedef OLattice<typename BinaryReturn<T1, T2, FnLocalColorInnerProduct>::Type_t>  Type_t;
 };
 
 template<class T1, class T2>

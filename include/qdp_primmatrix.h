@@ -167,7 +167,17 @@ private:
 };
 
 
+  template <class T, int N, template<class,int> class C>
+  struct FirstWord<PMatrix<T,N,C> >
+  {
+    static typename WordType<T>::Type_t get(const PMatrix<T,N,C>& a)
+    {
+      return FirstWord<T>::get(a.elem(0,0));
+    }
+  };
 
+
+  
 
 // Input
 //! Ascii input
@@ -275,12 +285,23 @@ XMLWriter& operator<<(XMLWriter& xml, const PMatrix<T,N,C>& d)
 // Traits classes 
 //-----------------------------------------------------------------------------
 
+
 // Underlying word type
 template<class T1, int N, template<class,int> class C>
 struct WordType<PMatrix<T1,N,C> > 
 {
   typedef typename WordType<T1>::Type_t  Type_t;
 };
+
+
+
+template<class T1, int N, template<class,int> class C>
+struct ScalarType< PMatrix<T1, N, C> >
+{
+  typedef PMatrix< typename ScalarType<T1>::Type_t, N, C > Type_t;
+};
+
+
 
 // Fixed Precision
 template<class T1, int N, template<class,int> class C>
@@ -1481,16 +1502,6 @@ zero_rep(PMatrix<T,N,C>& dest)
       zero_rep(dest.elem(i,j));
 }
 
-
-//! dest = (mask) ? s1 : dest
-template<class T, class T1, int N, template<class,int> class C> 
-inline void 
-copymask(PMatrix<T,N,C>& d, const PScalar<T1>& mask, const PMatrix<T,N,C>& s1) 
-{
-  for(int i=0; i < N; ++i)
-    for(int j=0; j < N; ++j)
-      copymask(d.elem(i,j),mask.elem(),s1.elem(i,j));
-}
 
 
 //! dest [some type] = source [some type]

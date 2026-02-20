@@ -18,7 +18,7 @@
 
 int gethostname(char *hostname, size_t size)
 {
-   char *my_host_name="node";
+   const char *my_host_name="node";
 
    // My Host Size returns either the length of my_host_name
    // or the size of the supplied array - 1 char
@@ -43,7 +43,7 @@ int
 QDP_info (const char* format, ...)
 {
   va_list argp;
-  char    info[128], hostname[256];
+  char    info[512], hostname[256];
   char    buffer[1024*5];
 
   /* get machine host name */
@@ -70,7 +70,7 @@ QDP_info_primary (const char* format, ...)
     return 0;
 
   va_list argp;
-  char    info[128], hostname[256];
+  char    info[512], hostname[256];
   char    buffer[1024*5];
 
   /* get machine host name */
@@ -97,7 +97,7 @@ QDP_debug (const char* format, ...)
 {
 #ifdef GPU_DEBUG
   va_list argp;
-  char    info[128], hostname[256];
+  char    info[512], hostname[256];
   char    buffer[1024*5];
 
   /* get machine host name */
@@ -124,7 +124,7 @@ QDP_debug_deep (const char* format, ...)
 {
 #ifdef GPU_DEBUG_DEEP
   va_list argp;
-  char    info[128], hostname[256];
+  char    info[512], hostname[256];
   char    buffer[1024*5];
 
   /* get machine host name */
@@ -154,7 +154,7 @@ int
 QDP_error (const char* format, ...)
 {
   va_list argp;
-  char    info[128], hostname[256];
+  char    info[512], hostname[256];
   char    buffer[1024];
 
   /* get machine host name */
@@ -178,7 +178,7 @@ void
 QDP_error_exit (const char* format, ...)
 {
   va_list argp;
-  char    info[128], hostname[256];
+  char    info[512], hostname[256];
   char    buffer[1024];
 
   /* get machine host name */

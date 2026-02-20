@@ -128,11 +128,23 @@ public:
 // Traits classes 
 //-----------------------------------------------------------------------------
 
+  template<class T, int N>
+  struct ScalarType<PColorMatrixJIT<T,N> >
+  {
+    typedef PColorMatrixJIT< typename ScalarType<T>::Type_t,N > Type_t;
+  };
+
 
   template<class T, int N> 
   struct REGType<PColorMatrixJIT<T,N> >
   {
     typedef PColorMatrixREG<typename REGType<T>::Type_t,N>  Type_t;
+  };
+
+  template<class T, int N> 
+  struct BASEType<PColorMatrixJIT<T,N> >
+  {
+    typedef PColorMatrix<typename BASEType<T>::Type_t,N>  Type_t;
   };
 
 
@@ -852,6 +864,8 @@ quarkContractXX(const PColorMatrixJIT<T1,4>& s1, const PColorMatrixJIT<T2,4>& s2
   return d ; 
 }
 
+
+  
 
 /*! @} */   // end of group primcolormatrix
 

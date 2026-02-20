@@ -1,0 +1,207 @@
+@PACKAGE_INIT@
+include(CMakeFindDependencyMacro)
+
+set(QDP_PARALLEL_ARCH @qdpParArch@)
+if( QDP_PARALLEL_ARCH STREQUAL "scalar")
+  set(QDP_ARCH_SCALAR ON)
+elseif( QDP_PARALLEL_ARCH STREQUAL "parscalar" )
+  set(QDP_ARCH_PARSCALAR ON)
+endif()
+
+set(QDP_PRECISION @QDP_PRECISION@)
+set(QDP_LAYOUT @QDP_LAYOUT@)
+# NC, ND, NS
+set(QDP_ND @QDP_ND@)
+set(QDP_NC @QDP_NC@)
+set(QDP_NS @QDP_NS@)
+set(QDP_ALIGNMENT_SIZE @QDP_ALIGNMENT_SIZE@)
+message(STATUS "QDP++:  Configuring System")
+message(STATUS "QDP++:  Nc=${QDP_NC}")
+message(STATUS "QDP++:  Nd=${QDP_ND}")
+message(STATUS "QDP++:  Ns=${QDP_NS}")
+
+if( ${QDP_NS} EQUAL 1 )
+  set(BUILD_STAGGERED_EXAMPLES ON)
+else()
+  set(BUILD_WILSON_EXAMPLES ON)
+endif()
+
+if ( QDP_PARALLEL_ARCH STREQUAL "parscalar" )
+  message(STATUS "QDP++: Parscalar build" )
+elseif( QDP_PARALLEL_ARCH "scalar" )
+  message(STATUS "QDP++: Scalar build" )
+endif()
+
+if( QDP_LAYOUT STREQUAL "lexico")
+  message( STATUS "QDP++: Lexicographic Layout" )
+elseif( QDP_LAYOUT STREQUAL "cb2")
+  message( STATUS "QDP++: CB2 (4D Checkerboard) Layout" )
+elseif( QDP_LAYOUT STREQUAL "cb32")
+  message( STATUS "QDP++: CB32 (32 colored ) Layout" )
+elseif( QDP_LAYOUT STREQUAL "cb3d")
+  message( STATUS "QDP++:  CB3D (3D checkerboarded ) Layout" )
+endif()
+message( STATUS "QDP++: Precision is ${QDP_PRECISION}")
+
+set(QDP_ENABLE_BACKEND @QDP_ENABLE_BACKEND@)
+
+if( QDP_ENABLE_BACKEND STREQUAL "ROCM" )
+  set(QDP_BACKEND_ROCM 1)
+elseif( QDP_ENABLE_BACKEND STREQUAL "CUDA")
+  set(QDP_BACKEND_CUDA 1)
+elseif( QDP_ENABLE_BACKEND STREQUAL "AVX")
+  set(QDP_BACKEND_AVX 1)
+elseif( QDP_ENABLE_BACKEND STREQUAL "L0")
+  set(QDP_BACKEND_L0 1)
+endif()
+
+# Check if we need QMP
+if( QDP_ARCH_PARSCALAR )
+  find_dependency(QMP REQUIRED)
+endif()
+
+
+set(QDP_ENABLE_CODEGEN_VECTOR @QDP_ENABLE_CODEGEN_VECTOR)
+
+if(QDP_ENABLE_CODEGEN_VECTOR)
+  set(QDP_CODEGEN_VECTOR "1")
+endif()
+
+
+
+set(QDP_ENABLE_LLVM14 @QDP_ENABLE_LLVM14@)
+set(QDP_ENABLE_LLVM15 @QDP_ENABLE_LLVM15@)
+set(QDP_ENABLE_LLVM16 @QDP_ENABLE_LLVM16@)
+set(QDP_ENABLE_LLVM17 @QDP_ENABLE_LLVM17@)
+set(QDP_ENABLE_LLVM18 @QDP_ENABLE_LLVM18@)
+set(QDP_ENABLE_LLVM19 @QDP_ENABLE_LLVM19@)
+set(QDP_ENABLE_LLVM20 @QDP_ENABLE_LLVM20@)
+
+if(QDP_ENABLE_LLVM14)
+  set(QDP_LLVM14 "1")
+endif()
+if(QDP_ENABLE_LLVM15)
+  set(QDP_LLVM15 "1")
+endif()
+if(QDP_ENABLE_LLVM16)
+  set(QDP_LLVM16 "1")
+endif()
+if(QDP_ENABLE_LLVM17)
+  set(QDP_LLVM17 "1")
+endif()
+if(QDP_ENABLE_LLVM18)
+  set(QDP_LLVM18 "1")
+endif()
+if(QDP_ENABLE_LLVM19)
+  set(QDP_LLVM19 "1")
+endif()
+if(QDP_ENABLE_LLVM20)
+  set(QDP_LLVM20 "1")
+endif()
+
+
+set(QDP_PROP_OPT @QDP_PROP_OPT@)
+
+set(QDP_IS_QDPJIT 1)
+
+# This is just in case we want to rebuild the examples as 
+# an external
+set(QDP_PRECISION @qdpPrecision@)
+set(QDP_LAYOUT    @qdpLayout@)
+set(QDP_USE_OMP_THREADS @QDP_USE_OMP_THREADS@)
+ 
+# Find submodules.
+# I am working on the premise that in a regular build currently
+# These will be installed in parallel with QDP++
+# 
+# However, the user is permitted to specify them by pointing 
+# XPathReader_DIR, FileDB_DIR, LibIntrin_DIR and QIO_DIR to 
+# directories conttaining the PackageXXXConfig.cmake files
+#
+if("@XPathReader_DIR@" STREQUAL "")
+  list(APPEND CMAKE_PREFIX_PATH ${CMAKE_CURRENT_LIST_DIR}/../XPathReader)
+endif()
+ 
+if("@FileDB_DIR@" STREQUAL "")
+  list(APPEND CMAKE_PREFIX_PATH ${CMAKE_CURRENT_LIST_DIR}/../FileDB)
+endif()
+
+if("@QIO_DIR@" STREQUAL "")
+  list(APPEND CMAKE_PREFIX_PATH ${CMAKE_CURRENT_LIST_DIR}/../QIO)
+endif()
+
+
+find_package(LLVM CONFIG REQUIRED)
+
+if(QDP_ENABLE_LLVM20 AND NOT LLVM_VERSION_MAJOR EQUAL 20)
+  message(FATAL_ERROR "LLVM 20.x required but found ${LLVM_PACKAGE_VERSION}")
+elseif(QDP_ENABLE_LLVM19 AND NOT LLVM_VERSION_MAJOR EQUAL 19)
+  message(FATAL_ERROR "LLVM 19.x required but found ${LLVM_PACKAGE_VERSION}")
+elseif(QDP_ENABLE_LLVM18 AND NOT LLVM_VERSION_MAJOR EQUAL 18)
+  message(FATAL_ERROR "LLVM 18.x required but found ${LLVM_PACKAGE_VERSION}")
+elseif(QDP_ENABLE_LLVM17 AND NOT LLVM_VERSION_MAJOR EQUAL 17)
+  message(FATAL_ERROR "LLVM 17.x required but found ${LLVM_PACKAGE_VERSION}")
+elseif(QDP_ENABLE_LLVM16 AND NOT LLVM_VERSION_MAJOR EQUAL 16)
+  message(FATAL_ERROR "LLVM 16.x required but found ${LLVM_PACKAGE_VERSION}")
+elseif(QDP_ENABLE_LLVM15 AND NOT LLVM_VERSION_MAJOR EQUAL 15)
+  message(FATAL_ERROR "LLVM 15.x required but found ${LLVM_PACKAGE_VERSION}")
+elseif(QDP_ENABLE_LLVM14 AND NOT LLVM_VERSION_MAJOR EQUAL 14)
+  message(FATAL_ERROR "LLVM 14.x required but found ${LLVM_PACKAGE_VERSION}")
+endif()
+
+
+find_dependency(XPathReader REQUIRED)
+find_dependency(FileDB REQUIRED)
+find_dependency(QIO REQUIRED)
+
+
+
+# Optional dependencies
+# TBB 
+if(@QDP_USE_TBBPOOL_ALLOCATOR@) 
+  find_dependency(TBB REQUIRED)
+endif()
+
+# HDF5
+if(@QDP_USE_HDF5@)
+  find_dependency(HDF5 REQUIRED)
+endif()
+
+# OpenMP is always a dependency now
+#if( NOT OpenMP_FOUND )
+#  find_dependency(OpenMP REQUIRED)
+#endif()
+
+if(NOT Threads_FOUND )
+  find_dependency(Threads REQUIRED)
+endif()
+
+# Target Dependent dependencies
+if( QDP_BACKEND_CUDA )
+  find_dependency(CUDAToolkit REQUIRED)
+elseif( QDP_BACKEND_ROCM )
+   if( NOT DEFINED ROCM_PATH )
+    if( NOT DEFINED ENV{ROCM_PATH})
+      set(ROCM_PATH "/opt/rocm" CACHE_PATH "ROCm PATH")
+    else()
+      set(ROCM_PATH $ENV{ROCM_PATH} CACHE PATH "ROCm PATH")
+    endif()
+  endif()
+
+  set(GPU_TARGETS @GPU_TARGETS@)
+  message(STATUS "Setting  to ${GPU_TARGETS}")
+  set(CMAKE_MODULE_PATH "${ROCM_PATH}/lib/cmake" ${CMAKE_MODULE_PATH})
+ 
+  find_dependency(hip REQUIRED)
+  find_dependency(LLD REQUIRED)
+  set(QDP_USE_ROCM_STATS @QDP_USE_ROCM_STATS@)
+  if(QDP_USE_ROCM_STATS)
+    find_dependency(amd_comgr REQUIRED)
+  endif()
+elseif( QDP_BACKEND_L0 )
+  find_dependency(LevelZero REQUIRED)
+endif()
+
+
+
+include(${CMAKE_CURRENT_LIST_DIR}/QDPXXTargets.cmake)

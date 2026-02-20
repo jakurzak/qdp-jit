@@ -14,6 +14,7 @@ namespace QDP {
   //template<class T>       struct SignedType;
 template<class T>       struct JITType;
 template<class T>       struct REGType;
+template<class T>       struct BASEType;
 template<class T,int N> struct GetLimit;
 
   // template<> struct SignedType<float> { typedef float Type_t; }
@@ -41,14 +42,22 @@ template<class T,int N> struct GetLimit;
 
 
 template<> struct JITType<int>    { typedef int    Type_t; };
+template<> struct JITType<jit_half_t>  { typedef jit_half_t  Type_t; };
 template<> struct JITType<float>  { typedef float  Type_t; };
 template<> struct JITType<double> { typedef double Type_t; };
 template<> struct JITType<bool>   { typedef bool   Type_t; };
 
 template<> struct REGType<int>    { typedef int    Type_t; };
+template<> struct REGType<jit_half_t>  { typedef jit_half_t  Type_t; };
 template<> struct REGType<float>  { typedef float  Type_t; };
 template<> struct REGType<double> { typedef double Type_t; };
 template<> struct REGType<bool>   { typedef bool   Type_t; };
+
+template<> struct BASEType<int>    { typedef int    Type_t; };
+template<> struct BASEType<jit_half_t>  { typedef jit_half_t  Type_t; };
+template<> struct BASEType<float>  { typedef float  Type_t; };
+template<> struct BASEType<double> { typedef double Type_t; };
+template<> struct BASEType<bool>   { typedef bool   Type_t; };
 
 
 
@@ -83,6 +92,7 @@ struct QDPSubTypeTrait {};
   // to participate in jitting.
   template<class T> struct WordType;
 
+  template<> struct WordType<jit_half_t>  { typedef jit_half_t  Type_t; };
   template<> struct WordType<float>  { typedef float  Type_t; };
   template<> struct WordType<double> { typedef double Type_t; };
   template<> struct WordType<int>    { typedef int    Type_t; };

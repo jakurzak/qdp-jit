@@ -46,6 +46,9 @@ namespace Layout
   //! Set number of processors in a multi-threaded implementation
   void setNumProc(int N);
 
+  // Is the Layout initialized ?
+  bool initialized();
+  
   //! Returns the logical node number for the corresponding lattice coordinate
   /*! The API requires this function to be here */
   int nodeNumber(const multi1d<int>& coord) QDP_CONST;
@@ -80,7 +83,7 @@ namespace Layout
   const multi1d<int>& lattSize() QDP_CONST;
 
   //! Total lattice volume
-  int vol() QDP_CONST;
+  size_t vol() QDP_CONST;
 
   //! Number of sites on node
   int sitesOnNode() QDP_CONST;
@@ -125,6 +128,17 @@ namespace Layout
   const multi1d<int>& getIONodeGrid() QDP_CONST;
 
 
+#if QDP_USE_VNODE_LAYOUT == 1
+  std::vector<multi1d<int> >& virtualNodeCoords();
+  multi1d<int> virtualNodeGeom();
+  multi1d<int> virtualNodeSubgridLattSize();
+  int virtualNodeSites();
+  int virtualNodeNumber();
+  void printVirtualNodeInfo();
+  void setVirtualNodeGeom(const multi1d<int>&);
+  void initVirtualNode();
+#endif
+  
 }
 
 //! Declaration of shift function object

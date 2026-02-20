@@ -131,9 +131,19 @@ public:
 
 private:
   T F[N];
- 
 };
 
+
+template <class T, int N, template<class,int> class C>
+struct FirstWord<PVector<T,N,C> >
+{
+  static typename WordType<T>::Type_t get(const PVector<T,N,C>& a)
+  {
+    return FirstWord<T>::get(a.elem());
+  }
+};
+
+  
 
 //! Stream input
 template<class T, int N, template<class,int> class C>  
@@ -233,12 +243,22 @@ XMLWriter& operator<<(XMLWriter& xml, const PVector<T,N,C>& d)
 // Traits classes 
 //-----------------------------------------------------------------------------
 
+
+  
 // Underlying word type
 template<class T1, int N, template<class,int> class C>
 struct WordType<PVector<T1,N,C> > 
 {
   typedef typename WordType<T1>::Type_t  Type_t;
 };
+
+
+template<class T1, int N, template<class, int> class C> 
+struct ScalarType< PVector<T1,N,C> >
+{
+  typedef PVector< typename ScalarType<T1>::Type_t, N, C> Type_t;
+};
+
 
 template<class T1, int N, template<class, int> class C> 
 struct SinglePrecType< PVector<T1,N,C> >
@@ -709,15 +729,6 @@ zero_rep(PVector<T,N,C>& dest)
 {
   for(int i=0; i < N; ++i)
     zero_rep(dest.elem(i));
-}
-
-//! dest = (mask) ? s1 : dest
-template<class T, class T1, int N, template<class,int> class C> 
-inline void 
-copymask(PVector<T,N,C>& d, const PScalar<T1>& mask, const PVector<T,N,C>& s1) 
-{
-  for(int i=0; i < N; ++i)
-    copymask(d.elem(i),mask.elem(),s1.elem(i));
 }
 
 

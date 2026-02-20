@@ -21,13 +21,6 @@ namespace QDP {
 
 
 //! Primitive Spin Matrix class
-/*! 
-   * Spin matrix class support gamma matrix algebra 
-   *
-   * NOTE: the class is mostly empty - it is the specialized versions below
-   * that know for a fixed size how gamma matrices (constants) should act
-   * on the spin vectors.
-   */
 template <class T, int N> class PSpinMatrixREG : public PMatrixREG<T, N, PSpinMatrixREG>
 {
   //  PSpinMatrixREG(const PSpinMatrixREG& a);
@@ -38,6 +31,12 @@ public:
     for (int i = 0 ; i < N ; i++ ) 
       for (int q = 0 ; q < N ; q++ ) 
 	this->elem(i,q).setup( j.elem(i,q) );
+  }
+
+  void setup_value( const typename JITType< PSpinMatrixREG >::Type_t& j ) {
+    for (int i = 0 ; i < N ; i++ ) 
+      for (int q = 0 ; q < N ; q++ ) 
+	this->elem(i,q).setup_value( j.elem(i,q) );
   }
 
 
@@ -85,6 +84,14 @@ public:
 // Traits classes 
 //-----------------------------------------------------------------------------
 
+
+  template <class T, int N>
+  struct IsWordVec< PSpinMatrixREG<T,N > >
+  {
+    constexpr static bool value = IsWordVec<T>::value;
+  };
+
+  
 template<class T1, int N>
 struct JITType<PSpinMatrixREG<T1,N> > 
 {
@@ -279,6 +286,27 @@ struct BinaryReturn<PSpinMatrixREG<T1,N>, PSpinMatrixREG<T2,N>, FnLocalInnerProd
   typedef PScalarREG<typename BinaryReturn<T1, T2, FnLocalInnerProduct>::Type_t>  Type_t;
 };
 
+
+
+template<class T1, class T2, int N>
+inline typename BinaryReturn<PSpinMatrixREG<T1,N>, PSpinMatrixREG<T2,N>, FnLocalColorInnerProduct>::Type_t
+localColorInnerProduct(const PSpinMatrixREG<T1,N>& l, const PSpinMatrixREG<T2,N>& r)
+{
+  typename BinaryReturn<PSpinMatrixREG<T1,N>, PSpinMatrixREG<T2,N>, FnLocalColorInnerProduct>::Type_t d;
+
+  for(int i=0; i < N; ++i)
+    for(int j=0; j < N; ++j)
+      {
+	d.elem(i,j) = localColorInnerProduct(l.elem(0,i), r.elem(0,j));
+	for(int k=1; k < N; ++k)
+	  d.elem(i,j) += localColorInnerProduct(l.elem(k,i), r.elem(k,j));
+      }
+    
+  return d;
+}
+
+
+  
 template<class T1, class T2, int N>
 struct BinaryReturn<PSpinMatrixREG<T1,N>, PScalarREG<T2>, FnLocalInnerProduct> {
   typedef PScalarREG<typename BinaryReturn<T1, T2, FnLocalInnerProduct>::Type_t>  Type_t;
@@ -322,49 +350,26 @@ struct BinaryReturn<PScalarREG<T1>, PSpinMatrixREG<T2,N>, FnLocalInnerProductRea
 
 
 // Gamma algebra
-template<int m, class T2, int N, class OpGammaConstMultiply>
-struct BinaryReturn<GammaConst<N,m>, PSpinMatrixREG<T2,N>, OpGammaConstMultiply> {
-  typedef PSpinMatrixREG<typename UnaryReturn<T2, OpUnaryPlus>::Type_t, N>  Type_t;
-};
-
-template<class T2, int N, int m, class OpMultiplyGammaConst>
-struct BinaryReturn<PSpinMatrixREG<T2,N>, GammaConst<N,m>, OpMultiplyGammaConst> {
-  typedef PSpinMatrixREG<typename UnaryReturn<T2, OpUnaryPlus>::Type_t, N>  Type_t;
-};
-
-template<class T2, int N, class OpGammaTypeMultiply>
+template<class T2, int N>
 struct BinaryReturn<GammaType<N>, PSpinMatrixREG<T2,N>, OpGammaTypeMultiply> {
   typedef PSpinMatrixREG<typename UnaryReturn<T2, OpUnaryPlus>::Type_t, N>  Type_t;
 };
 
-template<class T2, int N, class OpMultiplyGammaType>
+template<class T2, int N>
 struct BinaryReturn<PSpinMatrixREG<T2,N>, GammaType<N>, OpMultiplyGammaType> {
   typedef PSpinMatrixREG<typename UnaryReturn<T2, OpUnaryPlus>::Type_t, N>  Type_t;
 };
 
 
-// Gamma algebra
-template<int m, class T2, int N, class OpGammaConstDPMultiply>
-struct BinaryReturn<GammaConstDP<N,m>, PSpinMatrixREG<T2,N>, OpGammaConstDPMultiply> {
+template<class T2, int N>
+struct BinaryReturn<GammaTypeDP<N>, PSpinMatrixREG<T2,N>, OpGammaTypeMultiply> {
   typedef PSpinMatrixREG<typename UnaryReturn<T2, OpUnaryPlus>::Type_t, N>  Type_t;
 };
 
-template<class T2, int N, int m, class OpMultiplyGammaConstDP>
-struct BinaryReturn<PSpinMatrixREG<T2,N>, GammaConstDP<N,m>, OpMultiplyGammaConstDP> {
+template<class T2, int N>
+struct BinaryReturn<PSpinMatrixREG<T2,N>, GammaTypeDP<N>, OpMultiplyGammaType> {
   typedef PSpinMatrixREG<typename UnaryReturn<T2, OpUnaryPlus>::Type_t, N>  Type_t;
 };
-
-template<class T2, int N, class OpGammaTypeDPMultiply>
-struct BinaryReturn<GammaTypeDP<N>, PSpinMatrixREG<T2,N>, OpGammaTypeDPMultiply> {
-  typedef PSpinMatrixREG<typename UnaryReturn<T2, OpUnaryPlus>::Type_t, N>  Type_t;
-};
-
-template<class T2, int N, class OpMultiplyGammaTypeDP>
-struct BinaryReturn<PSpinMatrixREG<T2,N>, GammaTypeDP<N>, OpMultiplyGammaTypeDP> {
-  typedef PSpinMatrixREG<typename UnaryReturn<T2, OpUnaryPlus>::Type_t, N>  Type_t;
-};
-
-
 
 
 
@@ -547,6 +552,7 @@ struct UnaryReturn<PSpinMatrixREG<T,N>, FnPeekSpinMatrixREG > {
   typedef PScalarREG<typename UnaryReturn<T, FnPeekSpinMatrixREG >::Type_t>  Type_t;
 };
 
+
 template<class T, int N>
 inline typename UnaryReturn<PSpinMatrixREG<T,N>, FnPeekSpinMatrixREG >::Type_t
 peekSpin(const PSpinMatrixREG<T,N>& l, llvm::Value* row, llvm::Value* col)
@@ -555,7 +561,11 @@ peekSpin(const PSpinMatrixREG<T,N>& l, llvm::Value* row, llvm::Value* col)
 
   typedef typename JITType< PSpinMatrixREG<T,N> >::Type_t TTjit;
 
-  llvm::Value* ptr_local = llvm_alloca( llvm_type<typename WordType<T>::Type_t>::value , TTjit::Size_t );
+  llvm::Value* ptr_local;
+  if (IsWordVec<T>::value)
+    ptr_local = llvm_alloca( llvm_get_vectype<typename WordType<T>::Type_t>() , TTjit::ScalarSize_t );
+  else
+    ptr_local = llvm_alloca( llvm_get_type<typename WordType<T>::Type_t>() , TTjit::ScalarSize_t );
 
   TTjit dj;
   dj.setup( ptr_local, JitDeviceLayout::Scalar );
@@ -582,1103 +592,658 @@ pokeSpin(PSpinMatrixREG<T1,N>& l, const PScalarREG<T2>& r, int row, int col)
 // SpinMatrix<4> = Gamma<4,m> * SpinMatrix<4>
 // There are 16 cases here for Nd=4
 template<class T2>
-inline typename BinaryReturn<GammaConst<4,0>, PSpinMatrixREG<T2,4>, OpGammaConstMultiply>::Type_t
-operator*(const GammaConst<4,0>&, const PSpinMatrixREG<T2,4>& r)
+inline typename BinaryReturn<GammaType<4>, PSpinMatrixREG<T2,4>, OpGammaTypeMultiply>::Type_t
+operator*(const GammaType<4>& g, const PSpinMatrixREG<T2,4>& r)
 {
-  typename BinaryReturn<GammaConst<4,0>, PSpinMatrixREG<T2,4>, OpGammaConstMultiply>::Type_t  d(r.func());
-  
-  for(int i=0; i < 4; ++i)
-  {
-    d.elem(0,i) = r.elem(0,i);
-    d.elem(1,i) = r.elem(1,i);
-    d.elem(2,i) = r.elem(2,i);
-    d.elem(3,i) = r.elem(3,i);
+  typename BinaryReturn<GammaType<4>, PSpinMatrixREG<T2,4>, OpGammaTypeMultiply>::Type_t  d;
+
+  switch ( g.elem() ) {
+  case 0:
+    for(int i=0; i < 4; ++i)
+      {
+	d.elem(0,i) = r.elem(0,i);
+	d.elem(1,i) = r.elem(1,i);
+	d.elem(2,i) = r.elem(2,i);
+	d.elem(3,i) = r.elem(3,i);
+      }
+    break;
+  case 1:
+    for(int i=0; i < 4; ++i)
+      {
+	d.elem(0,i) = timesI(r.elem(3,i));
+	d.elem(1,i) = timesI(r.elem(2,i));
+	d.elem(2,i) = timesMinusI(r.elem(1,i));
+	d.elem(3,i) = timesMinusI(r.elem(0,i));
+      }
+    break;
+  case 2:
+    for(int i=0; i < 4; ++i)
+      {
+	d.elem(0,i) = -r.elem(3,i);
+	d.elem(1,i) = r.elem(2,i);
+	d.elem(2,i) = r.elem(1,i);
+	d.elem(3,i) = -r.elem(0,i);
+      }
+    break;
+  case 3:
+    for(int i=0; i < 4; ++i)
+      {
+	d.elem(0,i) = timesMinusI(r.elem(0,i));
+	d.elem(1,i) = timesI(r.elem(1,i));
+	d.elem(2,i) = timesMinusI(r.elem(2,i));
+	d.elem(3,i) = timesI(r.elem(3,i));
+      }
+    break;
+  case 4:
+    for(int i=0; i < 4; ++i)
+      {
+	d.elem(0,i) = timesI(r.elem(2,i));
+	d.elem(1,i) = timesMinusI(r.elem(3,i));
+	d.elem(2,i) = timesMinusI(r.elem(0,i));
+	d.elem(3,i) = timesI(r.elem(1,i));
+      }
+    break;
+  case 5:
+    for(int i=0; i < 4; ++i)
+      {
+	d.elem(0,i) = -r.elem(1,i);
+	d.elem(1,i) = r.elem(0,i);
+	d.elem(2,i) = -r.elem(3,i);
+	d.elem(3,i) = r.elem(2,i);
+      }
+    break;
+  case 6:
+    for(int i=0; i < 4; ++i)
+      {
+	d.elem(0,i) = timesMinusI(r.elem(1,i));
+	d.elem(1,i) = timesMinusI(r.elem(0,i));
+	d.elem(2,i) = timesMinusI(r.elem(3,i));
+	d.elem(3,i) = timesMinusI(r.elem(2,i));
+      }
+    break;
+  case 7:
+    for(int i=0; i < 4; ++i)
+      {
+	d.elem(0,i) = r.elem(2,i);
+	d.elem(1,i) = r.elem(3,i);
+	d.elem(2,i) = -r.elem(0,i);
+	d.elem(3,i) = -r.elem(1,i);
+      }
+    break;
+  case 8:
+    for(int i=0; i < 4; ++i)
+      {
+	d.elem(0,i) = r.elem(2,i);
+	d.elem(1,i) = r.elem(3,i);
+	d.elem(2,i) = r.elem(0,i);
+	d.elem(3,i) = r.elem(1,i);
+      }
+    break;
+  case 9:
+    for(int i=0; i < 4; ++i)
+      {
+	d.elem(0,i) = timesI(r.elem(1,i));
+	d.elem(1,i) = timesI(r.elem(0,i));
+	d.elem(2,i) = timesMinusI(r.elem(3,i));
+	d.elem(3,i) = timesMinusI(r.elem(2,i));
+      }
+    break;
+  case 10:
+    for(int i=0; i < 4; ++i)
+      {
+	d.elem(0,i) = -r.elem(1,i);
+	d.elem(1,i) = r.elem(0,i);
+	d.elem(2,i) = r.elem(3,i);
+	d.elem(3,i) = -r.elem(2,i);
+      }
+    break;
+  case 11:
+    for(int i=0; i < 4; ++i)
+      {
+	d.elem(0,i) = timesMinusI(r.elem(2,i));
+	d.elem(1,i) = timesI(r.elem(3,i));
+	d.elem(2,i) = timesMinusI(r.elem(0,i));
+	d.elem(3,i) = timesI(r.elem(1,i));
+      }
+    break;
+  case 12:
+    for(int i=0; i < 4; ++i)
+      {
+	d.elem(0,i) = timesI(r.elem(0,i));
+	d.elem(1,i) = timesMinusI(r.elem(1,i));
+	d.elem(2,i) = timesMinusI(r.elem(2,i));
+	d.elem(3,i) = timesI(r.elem(3,i));
+      }
+    break;
+  case 13:
+    for(int i=0; i < 4; ++i)
+      {
+	d.elem(0,i) = -r.elem(3,i);
+	d.elem(1,i) = r.elem(2,i);
+	d.elem(2,i) = -r.elem(1,i);
+	d.elem(3,i) = r.elem(0,i);
+      }
+    break;
+  case 14:
+    for(int i=0; i < 4; ++i)
+      {
+	d.elem(0,i) = timesMinusI(r.elem(3,i));
+	d.elem(1,i) = timesMinusI(r.elem(2,i));
+	d.elem(2,i) = timesMinusI(r.elem(1,i));
+	d.elem(3,i) = timesMinusI(r.elem(0,i));
+      }
+    break;
+  case 15:
+    for(int i=0; i < 4; ++i)
+      {
+	d.elem(0,i) = r.elem(0,i);
+	d.elem(1,i) = r.elem(1,i);
+	d.elem(2,i) = -r.elem(2,i);
+	d.elem(3,i) = -r.elem(3,i);
+      }
+    break;
+  default:
+    QDPIO::cout << "Invalid gamma matrix number: " << g.elem() << std::endl;
+    QDP_abort(1);
   }
 
-  return d;
-}
-
-template<class T2>
-inline typename BinaryReturn<GammaConst<4,1>, PSpinMatrixREG<T2,4>, OpGammaConstMultiply>::Type_t
-operator*(const GammaConst<4,1>&, const PSpinMatrixREG<T2,4>& r)
-{
-  typename BinaryReturn<GammaConst<4,1>, PSpinMatrixREG<T2,4>, OpGammaConstMultiply>::Type_t  d(r.func());
-  
-  for(int i=0; i < 4; ++i)
-  {
-    d.elem(0,i) = timesI(r.elem(3,i));
-    d.elem(1,i) = timesI(r.elem(2,i));
-    d.elem(2,i) = timesMinusI(r.elem(1,i));
-    d.elem(3,i) = timesMinusI(r.elem(0,i));
-  }
-
-  return d;
-}
-
-template<class T2>
-inline typename BinaryReturn<GammaConst<4,2>, PSpinMatrixREG<T2,4>, OpGammaConstMultiply>::Type_t
-operator*(const GammaConst<4,2>&, const PSpinMatrixREG<T2,4>& r)
-{
-  typename BinaryReturn<GammaConst<4,2>, PSpinMatrixREG<T2,4>, OpGammaConstMultiply>::Type_t  d(r.func());
-
-  for(int i=0; i < 4; ++i)
-  {
-    d.elem(0,i) = -r.elem(3,i);
-    d.elem(1,i) = r.elem(2,i);
-    d.elem(2,i) = r.elem(1,i);
-    d.elem(3,i) = -r.elem(0,i);
-  }
-  
-  return d;
-}
-
-template<class T2>
-inline typename BinaryReturn<GammaConst<4,3>, PSpinMatrixREG<T2,4>, OpGammaConstMultiply>::Type_t
-operator*(const GammaConst<4,3>&, const PSpinMatrixREG<T2,4>& r)
-{
-  typename BinaryReturn<GammaConst<4,3>, PSpinMatrixREG<T2,4>, OpGammaConstMultiply>::Type_t  d(r.func());
-
-  for(int i=0; i < 4; ++i)
-  {
-    d.elem(0,i) = timesMinusI(r.elem(0,i));
-    d.elem(1,i) = timesI(r.elem(1,i));
-    d.elem(2,i) = timesMinusI(r.elem(2,i));
-    d.elem(3,i) = timesI(r.elem(3,i));
-  }
-  
-  return d;
-}
-
-template<class T2>
-inline typename BinaryReturn<GammaConst<4,4>, PSpinMatrixREG<T2,4>, OpGammaConstMultiply>::Type_t
-operator*(const GammaConst<4,4>&, const PSpinMatrixREG<T2,4>& r)
-{
-  typename BinaryReturn<GammaConst<4,4>, PSpinMatrixREG<T2,4>, OpGammaConstMultiply>::Type_t  d(r.func());
-
-  for(int i=0; i < 4; ++i)
-  {
-    d.elem(0,i) = timesI(r.elem(2,i));
-    d.elem(1,i) = timesMinusI(r.elem(3,i));
-    d.elem(2,i) = timesMinusI(r.elem(0,i));
-    d.elem(3,i) = timesI(r.elem(1,i));
-  }
-  
-  return d;
-}
-
-template<class T2>
-inline typename BinaryReturn<GammaConst<4,5>, PSpinMatrixREG<T2,4>, OpGammaConstMultiply>::Type_t
-operator*(const GammaConst<4,5>&, const PSpinMatrixREG<T2,4>& r)
-{
-  typename BinaryReturn<GammaConst<4,5>, PSpinMatrixREG<T2,4>, OpGammaConstMultiply>::Type_t  d(r.func());
-
-  for(int i=0; i < 4; ++i)
-  {
-    d.elem(0,i) = -r.elem(1,i);
-    d.elem(1,i) = r.elem(0,i);
-    d.elem(2,i) = -r.elem(3,i);
-    d.elem(3,i) = r.elem(2,i);
-  }
-  
-  return d;
-}
-
-template<class T2>
-inline typename BinaryReturn<GammaConst<4,6>, PSpinMatrixREG<T2,4>, OpGammaConstMultiply>::Type_t
-operator*(const GammaConst<4,6>&, const PSpinMatrixREG<T2,4>& r)
-{
-  typename BinaryReturn<GammaConst<4,6>, PSpinMatrixREG<T2,4>, OpGammaConstMultiply>::Type_t  d(r.func());
-
-  for(int i=0; i < 4; ++i)
-  {
-    d.elem(0,i) = timesMinusI(r.elem(1,i));
-    d.elem(1,i) = timesMinusI(r.elem(0,i));
-    d.elem(2,i) = timesMinusI(r.elem(3,i));
-    d.elem(3,i) = timesMinusI(r.elem(2,i));
-  }
-  
-  return d;
-}
-
-template<class T2>
-inline typename BinaryReturn<GammaConst<4,7>, PSpinMatrixREG<T2,4>, OpGammaConstMultiply>::Type_t
-operator*(const GammaConst<4,7>&, const PSpinMatrixREG<T2,4>& r)
-{
-  typename BinaryReturn<GammaConst<4,7>, PSpinMatrixREG<T2,4>, OpGammaConstMultiply>::Type_t  d(r.func());
-
-  for(int i=0; i < 4; ++i)
-  {
-    d.elem(0,i) = r.elem(2,i);
-    d.elem(1,i) = r.elem(3,i);
-    d.elem(2,i) = -r.elem(0,i);
-    d.elem(3,i) = -r.elem(1,i);
-  }
-  
-  return d;
-}
-
-template<class T2>
-inline typename BinaryReturn<GammaConst<4,8>, PSpinMatrixREG<T2,4>, OpGammaConstMultiply>::Type_t
-operator*(const GammaConst<4,8>&, const PSpinMatrixREG<T2,4>& r)
-{
-  typename BinaryReturn<GammaConst<4,8>, PSpinMatrixREG<T2,4>, OpGammaConstMultiply>::Type_t  d(r.func());
-
-  for(int i=0; i < 4; ++i)
-  {
-    d.elem(0,i) = r.elem(2,i);
-    d.elem(1,i) = r.elem(3,i);
-    d.elem(2,i) = r.elem(0,i);
-    d.elem(3,i) = r.elem(1,i);
-  }
-  
-  return d;
-}
-
-template<class T2>
-inline typename BinaryReturn<GammaConst<4,9>, PSpinMatrixREG<T2,4>, OpGammaConstMultiply>::Type_t
-operator*(const GammaConst<4,9>&, const PSpinMatrixREG<T2,4>& r)
-{
-  typename BinaryReturn<GammaConst<4,9>, PSpinMatrixREG<T2,4>, OpGammaConstMultiply>::Type_t  d(r.func());
-
-  for(int i=0; i < 4; ++i)
-  {
-    d.elem(0,i) = timesI(r.elem(1,i));
-    d.elem(1,i) = timesI(r.elem(0,i));
-    d.elem(2,i) = timesMinusI(r.elem(3,i));
-    d.elem(3,i) = timesMinusI(r.elem(2,i));
-  }
-  
-  return d;
-}
-
-template<class T2>
-inline typename BinaryReturn<GammaConst<4,10>, PSpinMatrixREG<T2,4>, OpGammaConstMultiply>::Type_t
-operator*(const GammaConst<4,10>&, const PSpinMatrixREG<T2,4>& r)
-{
-  typename BinaryReturn<GammaConst<4,10>, PSpinMatrixREG<T2,4>, OpGammaConstMultiply>::Type_t  d(r.func());
-
-  for(int i=0; i < 4; ++i)
-  {
-    d.elem(0,i) = -r.elem(1,i);
-    d.elem(1,i) = r.elem(0,i);
-    d.elem(2,i) = r.elem(3,i);
-    d.elem(3,i) = -r.elem(2,i);
-  }
-  
-  return d;
-}
-
-template<class T2>
-inline typename BinaryReturn<GammaConst<4,11>, PSpinMatrixREG<T2,4>, OpGammaConstMultiply>::Type_t
-operator*(const GammaConst<4,11>&, const PSpinMatrixREG<T2,4>& r)
-{
-  typename BinaryReturn<GammaConst<4,11>, PSpinMatrixREG<T2,4>, OpGammaConstMultiply>::Type_t  d(r.func());
-
-  for(int i=0; i < 4; ++i)
-  {
-    d.elem(0,i) = timesMinusI(r.elem(2,i));
-    d.elem(1,i) = timesI(r.elem(3,i));
-    d.elem(2,i) = timesMinusI(r.elem(0,i));
-    d.elem(3,i) = timesI(r.elem(1,i));
-  }
-  
-  return d;
-}
-
-template<class T2>
-inline typename BinaryReturn<GammaConst<4,12>, PSpinMatrixREG<T2,4>, OpGammaConstMultiply>::Type_t
-operator*(const GammaConst<4,12>&, const PSpinMatrixREG<T2,4>& r)
-{
-  typename BinaryReturn<GammaConst<4,12>, PSpinMatrixREG<T2,4>, OpGammaConstMultiply>::Type_t  d(r.func());
-
-  for(int i=0; i < 4; ++i)
-  {
-    d.elem(0,i) = timesI(r.elem(0,i));
-    d.elem(1,i) = timesMinusI(r.elem(1,i));
-    d.elem(2,i) = timesMinusI(r.elem(2,i));
-    d.elem(3,i) = timesI(r.elem(3,i));
-  }
-  
-  return d;
-}
-
-template<class T2>
-inline typename BinaryReturn<GammaConst<4,13>, PSpinMatrixREG<T2,4>, OpGammaConstMultiply>::Type_t
-operator*(const GammaConst<4,13>&, const PSpinMatrixREG<T2,4>& r)
-{
-  typename BinaryReturn<GammaConst<4,13>, PSpinMatrixREG<T2,4>, OpGammaConstMultiply>::Type_t  d(r.func());
-
-  for(int i=0; i < 4; ++i)
-  {
-    d.elem(0,i) = -r.elem(3,i);
-    d.elem(1,i) = r.elem(2,i);
-    d.elem(2,i) = -r.elem(1,i);
-    d.elem(3,i) = r.elem(0,i);
-  }
-  
-  return d;
-}
-
-template<class T2>
-inline typename BinaryReturn<GammaConst<4,14>, PSpinMatrixREG<T2,4>, OpGammaConstMultiply>::Type_t
-operator*(const GammaConst<4,14>&, const PSpinMatrixREG<T2,4>& r)
-{
-  typename BinaryReturn<GammaConst<4,14>, PSpinMatrixREG<T2,4>, OpGammaConstMultiply>::Type_t  d(r.func());
-
-  for(int i=0; i < 4; ++i)
-  {
-    d.elem(0,i) = timesMinusI(r.elem(3,i));
-    d.elem(1,i) = timesMinusI(r.elem(2,i));
-    d.elem(2,i) = timesMinusI(r.elem(1,i));
-    d.elem(3,i) = timesMinusI(r.elem(0,i));
-  }
-  
-  return d;
-}
-
-template<class T2>
-inline typename BinaryReturn<GammaConst<4,15>, PSpinMatrixREG<T2,4>, OpGammaConstMultiply>::Type_t
-operator*(const GammaConst<4,15>&, const PSpinMatrixREG<T2,4>& r)
-{
-  typename BinaryReturn<GammaConst<4,15>, PSpinMatrixREG<T2,4>, OpGammaConstMultiply>::Type_t  d(r.func());
-
-  for(int i=0; i < 4; ++i)
-  {
-    d.elem(0,i) = r.elem(0,i);
-    d.elem(1,i) = r.elem(1,i);
-    d.elem(2,i) = -r.elem(2,i);
-    d.elem(3,i) = -r.elem(3,i);
-  }
   
   return d;
 }
 
 
-// SpinMatrix<4> = SpinMatrix<4> * Gamma<4,m>
-// There are 16 cases here for Nd=4
-template<class T2>
-inline typename BinaryReturn<PSpinMatrixREG<T2,4>, GammaConst<4,0>, OpGammaConstMultiply>::Type_t
-operator*(const PSpinMatrixREG<T2,4>& l, const GammaConst<4,0>&)
-{
-  typename BinaryReturn<PSpinMatrixREG<T2,4>, GammaConst<4,0>, OpGammaConstMultiply>::Type_t  d; 
 
-  for(int i=0; i < 4; ++i)
-  {
-    d.elem(i,0) =  l.elem(i,0);
-    d.elem(i,1) =  l.elem(i,1);
-    d.elem(i,2) =  l.elem(i,2);
-    d.elem(i,3) =  l.elem(i,3);
+
+template<class T2>
+inline typename BinaryReturn<GammaTypeDP<4>, PSpinMatrixREG<T2,4>, OpGammaTypeMultiply>::Type_t
+operator*(const GammaTypeDP<4>& g, const PSpinMatrixREG<T2,4>& r)
+{
+  typename BinaryReturn<GammaTypeDP<4>, PSpinMatrixREG<T2,4>, OpGammaTypeMultiply>::Type_t  d;
+
+  switch ( g.elem() ) {
+  case 0:
+    for(int i=0; i < 4; ++i)
+      {
+	d.elem(0,i) = r.elem(0,i);
+	d.elem(1,i) = r.elem(1,i);
+	d.elem(2,i) = r.elem(2,i);
+	d.elem(3,i) = r.elem(3,i);
+      }
+    break;
+  case 1:
+    for(int i=0; i < 4; ++i)
+      {
+	d.elem(0,i) = timesMinusI(r.elem(3,i));
+	d.elem(1,i) = timesMinusI(r.elem(2,i));
+	d.elem(2,i) = timesI(r.elem(1,i));
+	d.elem(3,i) = timesI(r.elem(0,i));
+      }
+    break;
+  case 2:
+    for(int i=0; i < 4; ++i)
+      {
+	d.elem(0,i) = -r.elem(3,i);
+	d.elem(1,i) = r.elem(2,i);
+	d.elem(2,i) = r.elem(1,i);
+	d.elem(3,i) = -r.elem(0,i);
+      }
+    break;
+  case 3:
+    for(int i=0; i < 4; ++i)
+      {
+	d.elem(0,i) = timesI(r.elem(0,i));
+	d.elem(1,i) = timesMinusI(r.elem(1,i));
+	d.elem(2,i) = timesI(r.elem(2,i));
+	d.elem(3,i) = timesMinusI(r.elem(3,i));
+      }
+    break;
+  case 4:
+    for(int i=0; i < 4; ++i)
+      {
+	d.elem(0,i) = timesMinusI(r.elem(2,i));
+	d.elem(1,i) = timesI(r.elem(3,i));
+	d.elem(2,i) = timesI(r.elem(0,i));
+	d.elem(3,i) = timesMinusI(r.elem(1,i));
+      }
+    break;
+  case 5:
+    for(int i=0; i < 4; ++i)
+      {
+	d.elem(0,i) = -r.elem(1,i);
+	d.elem(1,i) = r.elem(0,i);
+	d.elem(2,i) = -r.elem(3,i);
+	d.elem(3,i) = r.elem(2,i);
+      }
+    break;
+  case 6:
+    for(int i=0; i < 4; ++i)
+      {
+	d.elem(0,i) = timesI(r.elem(1,i));
+	d.elem(1,i) = timesI(r.elem(0,i));
+	d.elem(2,i) = timesI(r.elem(3,i));
+	d.elem(3,i) = timesI(r.elem(2,i));
+      }
+    break;
+  case 7:
+    for(int i=0; i < 4; ++i)
+      {
+	d.elem(0,i) = r.elem(2,i);
+	d.elem(1,i) = r.elem(3,i);
+	d.elem(2,i) = -r.elem(0,i);
+	d.elem(3,i) = -r.elem(1,i);
+      }
+    break;
+  case 8:
+    for(int i=0; i < 4; ++i)
+      {
+	d.elem(0,i) = r.elem(0,i);
+	d.elem(1,i) = r.elem(1,i);
+	d.elem(2,i) = -r.elem(2,i);
+	d.elem(3,i) = -r.elem(3,i);
+      }
+    break;
+  case 9:
+    for(int i=0; i < 4; ++i)
+      {
+	d.elem(0,i) = timesI(r.elem(3,i));
+	d.elem(1,i) = timesI(r.elem(2,i));
+	d.elem(2,i) = timesI(r.elem(1,i));
+	d.elem(3,i) = timesI(r.elem(0,i));
+      }
+    break;
+  case 10:
+    for(int i=0; i < 4; ++i)
+      {
+	d.elem(0,i) =  r.elem(3,i);
+	d.elem(1,i) = -r.elem(2,i);
+	d.elem(2,i) =  r.elem(1,i);
+	d.elem(3,i) = -r.elem(0,i);
+      }
+    break;
+  case 11:
+    for(int i=0; i < 4; ++i)
+      {
+	d.elem(0,i) = timesI(r.elem(0,i));
+	d.elem(1,i) = timesMinusI(r.elem(1,i));
+	d.elem(2,i) = timesMinusI(r.elem(2,i));
+	d.elem(3,i) = timesI(r.elem(3,i));
+      }
+    break;
+  case 12:
+    for(int i=0; i < 4; ++i)
+      {
+	d.elem(0,i) = timesI(r.elem(2,i));
+	d.elem(1,i) = timesMinusI(r.elem(3,i));
+	d.elem(2,i) = timesI(r.elem(0,i));
+	d.elem(3,i) = timesMinusI(r.elem(1,i));
+      }
+    break;
+  case 13:
+    for(int i=0; i < 4; ++i)
+      {
+	d.elem(0,i) = -r.elem(1,i);
+	d.elem(1,i) = r.elem(0,i);
+	d.elem(2,i) = r.elem(3,i);
+	d.elem(3,i) = -r.elem(2,i);
+      }
+    break;
+  case 14:
+    for(int i=0; i < 4; ++i)
+      {
+	d.elem(0,i) = timesI(r.elem(1,i));
+	d.elem(1,i) = timesI(r.elem(0,i));
+	d.elem(2,i) = timesMinusI(r.elem(3,i));
+	d.elem(3,i) = timesMinusI(r.elem(2,i));
+      }
+    break;
+  case 15:
+    for(int i=0; i < 4; ++i)
+      {
+	d.elem(0,i) = -r.elem(2,i);
+	d.elem(1,i) = -r.elem(3,i);
+	d.elem(2,i) = -r.elem(0,i);
+	d.elem(3,i) = -r.elem(1,i);
+      }
+    break;
+  default:
+    QDPIO::cout << "Invalid gamma matrix number: " << g.elem() << std::endl;
+    QDP_abort(1);
+  }
+
+  
+  return d;
+}
+
+
+
+
+
+
+template<class T2>
+inline typename BinaryReturn<PSpinMatrixREG<T2,4>, GammaType<4>, OpGammaTypeMultiply>::Type_t
+operator*(const PSpinMatrixREG<T2,4>& l, const GammaType<4>& g)
+{
+  typename BinaryReturn<PSpinMatrixREG<T2,4>, GammaType<4>, OpGammaTypeMultiply>::Type_t  d; 
+
+  switch ( g.elem() ) {
+  case 0:
+    for(int i=0; i < 4; ++i)
+      {
+	d.elem(i,0) =  l.elem(i,0);
+	d.elem(i,1) =  l.elem(i,1);
+	d.elem(i,2) =  l.elem(i,2);
+	d.elem(i,3) =  l.elem(i,3);
+      }
+    break;  
+  case 1:
+    for(int i=0; i < 4; ++i)
+      {
+	d.elem(i,0) = timesMinusI(l.elem(i,3));
+	d.elem(i,1) = timesMinusI(l.elem(i,2));
+	d.elem(i,2) = timesI(l.elem(i,1));
+	d.elem(i,3) = timesI(l.elem(i,0));
+      }
+    break;  
+  case 2:
+    for(int i=0; i < 4; ++i)
+      {
+	d.elem(i,0) = -l.elem(i,3);
+	d.elem(i,1) =  l.elem(i,2);
+	d.elem(i,2) =  l.elem(i,1);
+	d.elem(i,3) = -l.elem(i,0);
+      }
+    break;  
+  case 3:
+    for(int i=0; i < 4; ++i)
+      {
+	d.elem(i,0) = timesMinusI(l.elem(i,0));
+	d.elem(i,1) = timesI(l.elem(i,1));
+	d.elem(i,2) = timesMinusI(l.elem(i,2));
+	d.elem(i,3) = timesI(l.elem(i,3));
+      }
+    break;  
+  case 4:
+    for(int i=0; i < 4; ++i)
+      {
+	d.elem(i,0) = timesMinusI(l.elem(i,2));
+	d.elem(i,1) = timesI(l.elem(i,3));
+	d.elem(i,2) = timesI(l.elem(i,0));
+	d.elem(i,3) = timesMinusI(l.elem(i,1));
+      }
+    break;  
+  case 5:
+    for(int i=0; i < 4; ++i)
+      {
+	d.elem(i,0) =  l.elem(i,1);
+	d.elem(i,1) = -l.elem(i,0);
+	d.elem(i,2) =  l.elem(i,3);
+	d.elem(i,3) = -l.elem(i,2);
+      }
+    break;  
+  case 6:
+    for(int i=0; i < 4; ++i)
+      {
+	d.elem(i,0) = timesMinusI(l.elem(i,1));
+	d.elem(i,1) = timesMinusI(l.elem(i,0));
+	d.elem(i,2) = timesMinusI(l.elem(i,3));
+	d.elem(i,3) = timesMinusI(l.elem(i,2));
+      }
+    break;  
+  case 7:
+    for(int i=0; i < 4; ++i)
+      {
+	d.elem(i,0) = -l.elem(i,2);
+	d.elem(i,1) = -l.elem(i,3);
+	d.elem(i,2) =  l.elem(i,0);
+	d.elem(i,3) =  l.elem(i,1);
+      }
+    break;  
+  case 8:
+    for(int i=0; i < 4; ++i)
+      {
+	d.elem(i,0) =  l.elem(i,2);
+	d.elem(i,1) =  l.elem(i,3);
+	d.elem(i,2) =  l.elem(i,0);
+	d.elem(i,3) =  l.elem(i,1);
+      }
+    break;  
+  case 9:
+    for(int i=0; i < 4; ++i)
+      {
+	d.elem(i,0) = timesI(l.elem(i,1));
+	d.elem(i,1) = timesI(l.elem(i,0));
+	d.elem(i,2) = timesMinusI(l.elem(i,3));
+	d.elem(i,3) = timesMinusI(l.elem(i,2));
+      }
+    break;  
+  case 10:
+    for(int i=0; i < 4; ++i)
+      {
+	d.elem(i,0) =  l.elem(i,1);
+	d.elem(i,1) = -l.elem(i,0);
+	d.elem(i,2) = -l.elem(i,3);
+	d.elem(i,3) =  l.elem(i,2);
+      }
+    break;  
+  case 11:
+    for(int i=0; i < 4; ++i)
+      {
+	d.elem(i,0) = timesMinusI(l.elem(i,2));
+	d.elem(i,1) = timesI(l.elem(i,3));
+	d.elem(i,2) = timesMinusI(l.elem(i,0));
+	d.elem(i,3) = timesI(l.elem(i,1));
+      }
+    break;  
+  case 12:
+    for(int i=0; i < 4; ++i)
+      {
+	d.elem(i,0) = timesI(l.elem(i,0));
+	d.elem(i,1) = timesMinusI(l.elem(i,1));
+	d.elem(i,2) = timesMinusI(l.elem(i,2));
+	d.elem(i,3) = timesI(l.elem(i,3));
+      }
+    break;  
+  case 13:
+    for(int i=0; i < 4; ++i)
+      {
+	d.elem(i,0) =  l.elem(i,3);
+	d.elem(i,1) = -l.elem(i,2);
+	d.elem(i,2) =  l.elem(i,1);
+	d.elem(i,3) = -l.elem(i,0);
+      }
+    break;  
+  case 14:
+    for(int i=0; i < 4; ++i)
+      {
+	d.elem(i,0) = timesMinusI(l.elem(i,3));
+	d.elem(i,1) = timesMinusI(l.elem(i,2));
+	d.elem(i,2) = timesMinusI(l.elem(i,1));
+	d.elem(i,3) = timesMinusI(l.elem(i,0));
+      }
+    break;  
+  case 15:
+    for(int i=0; i < 4; ++i)
+      {
+	d.elem(i,0) =  l.elem(i,0);
+	d.elem(i,1) =  l.elem(i,1);
+	d.elem(i,2) = -l.elem(i,2);
+	d.elem(i,3) = -l.elem(i,3);
+      }
+    break;  
+  default:
+    QDPIO::cout << "Invalid gamma matrix number: " << g.elem() << std::endl;
+    QDP_abort(1);
   }
  
   return d;
 }
 
-template<class T2>
-inline typename BinaryReturn<PSpinMatrixREG<T2,4>, GammaConst<4,1>, OpGammaConstMultiply>::Type_t
-operator*(const PSpinMatrixREG<T2,4>& l, const GammaConst<4,1>&)
-{
-  typename BinaryReturn<PSpinMatrixREG<T2,4>, GammaConst<4,1>, OpGammaConstMultiply>::Type_t  d;
 
-  for(int i=0; i < 4; ++i)
-  {
-    d.elem(i,0) = timesMinusI(l.elem(i,3));
-    d.elem(i,1) = timesMinusI(l.elem(i,2));
-    d.elem(i,2) = timesI(l.elem(i,1));
-    d.elem(i,3) = timesI(l.elem(i,0));
+
+template<class T2>
+inline typename BinaryReturn<PSpinMatrixREG<T2,4>, GammaTypeDP<4>, OpGammaTypeMultiply>::Type_t
+operator*(const PSpinMatrixREG<T2,4>& l, const GammaTypeDP<4>& g)
+{
+  typename BinaryReturn<PSpinMatrixREG<T2,4>, GammaTypeDP<4>, OpGammaTypeMultiply>::Type_t  d; 
+
+  switch ( g.elem() ) {
+  case 0:
+    for(int i=0; i < 4; ++i)
+      {
+	d.elem(i,0) =  l.elem(i,0);
+	d.elem(i,1) =  l.elem(i,1);
+	d.elem(i,2) =  l.elem(i,2);
+	d.elem(i,3) =  l.elem(i,3);
+      }
+    break;  
+  case 1:
+    for(int i=0; i < 4; ++i)
+      {
+	d.elem(i,0) = timesI(l.elem(i,3));
+	d.elem(i,1) = timesI(l.elem(i,2));
+	d.elem(i,2) = timesMinusI(l.elem(i,1));
+	d.elem(i,3) = timesMinusI(l.elem(i,0));
+      }
+    break;  
+  case 2:
+    for(int i=0; i < 4; ++i)
+      {
+	d.elem(i,0) = -l.elem(i,3);
+	d.elem(i,1) =  l.elem(i,2);
+	d.elem(i,2) =  l.elem(i,1);
+	d.elem(i,3) = -l.elem(i,0);
+      }
+    break;  
+  case 3:
+    for(int i=0; i < 4; ++i)
+      {
+	d.elem(i,0) = timesI(l.elem(i,0));
+	d.elem(i,1) = timesMinusI(l.elem(i,1));
+	d.elem(i,2) = timesI(l.elem(i,2));
+	d.elem(i,3) = timesMinusI(l.elem(i,3));
+      }
+    break;  
+  case 4:
+    for(int i=0; i < 4; ++i)
+      {
+	d.elem(i,0) = timesI(l.elem(i,2));
+	d.elem(i,1) = timesMinusI(l.elem(i,3));
+	d.elem(i,2) = timesMinusI(l.elem(i,0));
+	d.elem(i,3) = timesI(l.elem(i,1));
+      }
+    break;  
+  case 5:
+    for(int i=0; i < 4; ++i)
+      {
+	d.elem(i,0) =  l.elem(i,1);
+	d.elem(i,1) = -l.elem(i,0);
+	d.elem(i,2) =  l.elem(i,3);
+	d.elem(i,3) = -l.elem(i,2);
+      }
+    break;  
+  case 6:
+    for(int i=0; i < 4; ++i)
+      {
+	d.elem(i,0) = timesI(l.elem(i,1));
+	d.elem(i,1) = timesI(l.elem(i,0));
+	d.elem(i,2) = timesI(l.elem(i,3));
+	d.elem(i,3) = timesI(l.elem(i,2));
+      }
+    break;  
+  case 7:
+    for(int i=0; i < 4; ++i)
+      {
+	d.elem(i,0) = -l.elem(i,2);
+	d.elem(i,1) = -l.elem(i,3);
+	d.elem(i,2) =  l.elem(i,0);
+	d.elem(i,3) =  l.elem(i,1);
+      }
+    break;  
+  case 8:
+    for(int i=0; i < 4; ++i)
+      {
+	d.elem(i,0) =  l.elem(i,0);
+	d.elem(i,1) =  l.elem(i,1);
+	d.elem(i,2) = -l.elem(i,2);
+	d.elem(i,3) = -l.elem(i,3);
+      }
+    break;  
+  case 9:
+    for(int i=0; i < 4; ++i)
+      {
+	d.elem(i,0) = timesI(l.elem(i,3));
+	d.elem(i,1) = timesI(l.elem(i,2));
+	d.elem(i,2) = timesI(l.elem(i,1));
+	d.elem(i,3) = timesI(l.elem(i,0));
+      }
+    break;  
+  case 10:
+    for(int i=0; i < 4; ++i)
+      {
+	d.elem(i,0) = -l.elem(i,3);
+	d.elem(i,1) =  l.elem(i,2);
+	d.elem(i,2) = -l.elem(i,1);
+	d.elem(i,3) =  l.elem(i,0);
+      }
+    break;  
+  case 11:
+    for(int i=0; i < 4; ++i)
+      {
+	d.elem(i,0) = timesI(l.elem(i,0));
+	d.elem(i,1) = timesMinusI(l.elem(i,1));
+	d.elem(i,2) = timesMinusI(l.elem(i,2));
+	d.elem(i,3) = timesI(l.elem(i,3));
+      }
+    break;  
+  case 12:
+    for(int i=0; i < 4; ++i)
+      {
+	d.elem(i,0) = timesI(l.elem(i,2));
+	d.elem(i,1) = timesMinusI(l.elem(i,3));
+	d.elem(i,2) = timesI(l.elem(i,0));
+	d.elem(i,3) = timesMinusI(l.elem(i,1));
+      }
+    break;  
+  case 13:
+    for(int i=0; i < 4; ++i)
+      {
+	d.elem(i,0) =  l.elem(i,1);
+	d.elem(i,1) = -l.elem(i,0);
+	d.elem(i,2) = -l.elem(i,3);
+	d.elem(i,3) =  l.elem(i,2);
+      }
+    break;  
+  case 14:
+    for(int i=0; i < 4; ++i)
+      {
+	d.elem(i,0) = timesI(l.elem(i,1));
+	d.elem(i,1) = timesI(l.elem(i,0));
+	d.elem(i,2) = timesMinusI(l.elem(i,3));
+	d.elem(i,3) = timesMinusI(l.elem(i,2));
+      }
+    break;  
+  case 15:
+    for(int i=0; i < 4; ++i)
+      {
+	d.elem(i,0) = -l.elem(i,2);
+	d.elem(i,1) = -l.elem(i,3);
+	d.elem(i,2) = -l.elem(i,0);
+	d.elem(i,3) = -l.elem(i,1);
+      }
+    break;  
+  default:
+    QDPIO::cout << "Invalid gamma matrix number: " << g.elem() << std::endl;
+    QDP_abort(1);
   }
-  
+ 
   return d;
 }
 
-template<class T2>
-inline typename BinaryReturn<PSpinMatrixREG<T2,4>, GammaConst<4,2>, OpGammaConstMultiply>::Type_t
-operator*(const PSpinMatrixREG<T2,4>& l, const GammaConst<4,2>&)
-{
-  typename BinaryReturn<PSpinMatrixREG<T2,4>, GammaConst<4,2>, OpGammaConstMultiply>::Type_t  d;
 
-  for(int i=0; i < 4; ++i)
-  {
-    d.elem(i,0) = -l.elem(i,3);
-    d.elem(i,1) =  l.elem(i,2);
-    d.elem(i,2) =  l.elem(i,1);
-    d.elem(i,3) = -l.elem(i,0);
-  }
-  
-  return d;
-}
-
-template<class T2>
-inline typename BinaryReturn<PSpinMatrixREG<T2,4>, GammaConst<4,3>, OpGammaConstMultiply>::Type_t
-operator*(const PSpinMatrixREG<T2,4>& l, const GammaConst<4,3>&)
-{
-  typename BinaryReturn<PSpinMatrixREG<T2,4>, GammaConst<4,3>, OpGammaConstMultiply>::Type_t  d;
-
-  for(int i=0; i < 4; ++i)
-  {
-    d.elem(i,0) = timesMinusI(l.elem(i,0));
-    d.elem(i,1) = timesI(l.elem(i,1));
-    d.elem(i,2) = timesMinusI(l.elem(i,2));
-    d.elem(i,3) = timesI(l.elem(i,3));
-  }
-  
-  return d;
-}
-
-template<class T2>
-inline typename BinaryReturn<PSpinMatrixREG<T2,4>, GammaConst<4,4>, OpGammaConstMultiply>::Type_t
-operator*(const PSpinMatrixREG<T2,4>& l, const GammaConst<4,4>&)
-{
-  typename BinaryReturn<PSpinMatrixREG<T2,4>, GammaConst<4,4>, OpGammaConstMultiply>::Type_t  d;
-
-  for(int i=0; i < 4; ++i)
-  {
-    d.elem(i,0) = timesMinusI(l.elem(i,2));
-    d.elem(i,1) = timesI(l.elem(i,3));
-    d.elem(i,2) = timesI(l.elem(i,0));
-    d.elem(i,3) = timesMinusI(l.elem(i,1));
-  }
-  
-  return d;
-}
-
-template<class T2>
-inline typename BinaryReturn<PSpinMatrixREG<T2,4>, GammaConst<4,5>, OpGammaConstMultiply>::Type_t
-operator*(const PSpinMatrixREG<T2,4>& l, const GammaConst<4,5>&)
-{
-  typename BinaryReturn<PSpinMatrixREG<T2,4>, GammaConst<4,5>, OpGammaConstMultiply>::Type_t  d;
-
-  for(int i=0; i < 4; ++i)
-  {
-    d.elem(i,0) =  l.elem(i,1);
-    d.elem(i,1) = -l.elem(i,0);
-    d.elem(i,2) =  l.elem(i,3);
-    d.elem(i,3) = -l.elem(i,2);
-  }
-  
-  return d;
-}
-
-template<class T2>
-inline typename BinaryReturn<PSpinMatrixREG<T2,4>, GammaConst<4,6>, OpGammaConstMultiply>::Type_t
-operator*(const PSpinMatrixREG<T2,4>& l, const GammaConst<4,6>&)
-{
-  typename BinaryReturn<PSpinMatrixREG<T2,4>, GammaConst<4,6>, OpGammaConstMultiply>::Type_t  d;
-
-  for(int i=0; i < 4; ++i)
-  {
-    d.elem(i,0) = timesMinusI(l.elem(i,1));
-    d.elem(i,1) = timesMinusI(l.elem(i,0));
-    d.elem(i,2) = timesMinusI(l.elem(i,3));
-    d.elem(i,3) = timesMinusI(l.elem(i,2));
-  }
-  
-  return d;
-}
-
-template<class T2>
-inline typename BinaryReturn<PSpinMatrixREG<T2,4>, GammaConst<4,7>, OpGammaConstMultiply>::Type_t
-operator*(const PSpinMatrixREG<T2,4>& l, const GammaConst<4,7>&)
-{
-  typename BinaryReturn<PSpinMatrixREG<T2,4>, GammaConst<4,7>, OpGammaConstMultiply>::Type_t  d;
-
-  for(int i=0; i < 4; ++i)
-  {
-    d.elem(i,0) = -l.elem(i,2);
-    d.elem(i,1) = -l.elem(i,3);
-    d.elem(i,2) =  l.elem(i,0);
-    d.elem(i,3) =  l.elem(i,1);
-  }
-  
-  return d;
-}
-
-template<class T2>
-inline typename BinaryReturn<PSpinMatrixREG<T2,4>, GammaConst<4,8>, OpGammaConstMultiply>::Type_t
-operator*(const PSpinMatrixREG<T2,4>& l, const GammaConst<4,8>&)
-{
-  typename BinaryReturn<PSpinMatrixREG<T2,4>, GammaConst<4,8>, OpGammaConstMultiply>::Type_t  d;
-
-  for(int i=0; i < 4; ++i)
-  {
-    d.elem(i,0) =  l.elem(i,2);
-    d.elem(i,1) =  l.elem(i,3);
-    d.elem(i,2) =  l.elem(i,0);
-    d.elem(i,3) =  l.elem(i,1);
-  }
-  
-  return d;
-}
-
-template<class T2>
-inline typename BinaryReturn<PSpinMatrixREG<T2,4>, GammaConst<4,9>, OpGammaConstMultiply>::Type_t
-operator*(const PSpinMatrixREG<T2,4>& l, const GammaConst<4,9>&)
-{
-  typename BinaryReturn<PSpinMatrixREG<T2,4>, GammaConst<4,9>, OpGammaConstMultiply>::Type_t  d;
-
-  for(int i=0; i < 4; ++i)
-  {
-    d.elem(i,0) = timesI(l.elem(i,1));
-    d.elem(i,1) = timesI(l.elem(i,0));
-    d.elem(i,2) = timesMinusI(l.elem(i,3));
-    d.elem(i,3) = timesMinusI(l.elem(i,2));
-  }
-  
-  return d;
-}
-
-template<class T2>
-inline typename BinaryReturn<PSpinMatrixREG<T2,4>, GammaConst<4,10>, OpGammaConstMultiply>::Type_t
-operator*(const PSpinMatrixREG<T2,4>& l, const GammaConst<4,10>&)
-{
-  typename BinaryReturn<PSpinMatrixREG<T2,4>, GammaConst<4,10>, OpGammaConstMultiply>::Type_t  d;
-
-  for(int i=0; i < 4; ++i)
-  {
-    d.elem(i,0) =  l.elem(i,1);
-    d.elem(i,1) = -l.elem(i,0);
-    d.elem(i,2) = -l.elem(i,3);
-    d.elem(i,3) =  l.elem(i,2);
-  }
-  
-  return d;
-}
-
-template<class T2>
-inline typename BinaryReturn<PSpinMatrixREG<T2,4>, GammaConst<4,11>, OpGammaConstMultiply>::Type_t
-operator*(const PSpinMatrixREG<T2,4>& l, const GammaConst<4,11>&)
-{
-  typename BinaryReturn<PSpinMatrixREG<T2,4>, GammaConst<4,11>, OpGammaConstMultiply>::Type_t  d;
-
-  for(int i=0; i < 4; ++i)
-  {
-    d.elem(i,0) = timesMinusI(l.elem(i,2));
-    d.elem(i,1) = timesI(l.elem(i,3));
-    d.elem(i,2) = timesMinusI(l.elem(i,0));
-    d.elem(i,3) = timesI(l.elem(i,1));
-  }
-  
-  return d;
-}
-
-template<class T2>
-inline typename BinaryReturn<PSpinMatrixREG<T2,4>, GammaConst<4,12>, OpGammaConstMultiply>::Type_t
-operator*(const PSpinMatrixREG<T2,4>& l, const GammaConst<4,12>&)
-{
-  typename BinaryReturn<PSpinMatrixREG<T2,4>, GammaConst<4,12>, OpGammaConstMultiply>::Type_t  d;
-
-  for(int i=0; i < 4; ++i)
-  {
-    d.elem(i,0) = timesI(l.elem(i,0));
-    d.elem(i,1) = timesMinusI(l.elem(i,1));
-    d.elem(i,2) = timesMinusI(l.elem(i,2));
-    d.elem(i,3) = timesI(l.elem(i,3));
-  }
-  
-  return d;
-}
-
-template<class T2>
-inline typename BinaryReturn<PSpinMatrixREG<T2,4>, GammaConst<4,13>, OpGammaConstMultiply>::Type_t
-operator*(const PSpinMatrixREG<T2,4>& l, const GammaConst<4,13>&)
-{
-  typename BinaryReturn<PSpinMatrixREG<T2,4>, GammaConst<4,13>, OpGammaConstMultiply>::Type_t  d;
-
-  for(int i=0; i < 4; ++i)
-  {
-    d.elem(i,0) =  l.elem(i,3);
-    d.elem(i,1) = -l.elem(i,2);
-    d.elem(i,2) =  l.elem(i,1);
-    d.elem(i,3) = -l.elem(i,0);
-  }
-  
-  return d;
-}
-
-template<class T2>
-inline typename BinaryReturn<PSpinMatrixREG<T2,4>, GammaConst<4,14>, OpGammaConstMultiply>::Type_t
-operator*(const PSpinMatrixREG<T2,4>& l, const GammaConst<4,14>&)
-{
-  typename BinaryReturn<PSpinMatrixREG<T2,4>, GammaConst<4,14>, OpGammaConstMultiply>::Type_t  d;
-
-  for(int i=0; i < 4; ++i)
-  {
-    d.elem(i,0) = timesMinusI(l.elem(i,3));
-    d.elem(i,1) = timesMinusI(l.elem(i,2));
-    d.elem(i,2) = timesMinusI(l.elem(i,1));
-    d.elem(i,3) = timesMinusI(l.elem(i,0));
-  }
-  
-  return d;
-}
-
-template<class T2>
-inline typename BinaryReturn<PSpinMatrixREG<T2,4>, GammaConst<4,15>, OpGammaConstMultiply>::Type_t
-operator*(const PSpinMatrixREG<T2,4>& l, const GammaConst<4,15>&)
-{
-  typename BinaryReturn<PSpinMatrixREG<T2,4>, GammaConst<4,15>, OpGammaConstMultiply>::Type_t  d;
-
-  for(int i=0; i < 4; ++i)
-  {
-    d.elem(i,0) =  l.elem(i,0);
-    d.elem(i,1) =  l.elem(i,1);
-    d.elem(i,2) = -l.elem(i,2);
-    d.elem(i,3) = -l.elem(i,3);
-  }
-  
-  return d;
-}
 
 
 //-----------------------------------------------
 
-// SpinMatrix<4> = GammaDP<4,m> * SpinMatrix<4>
-// There are 16 cases here for Nd=4
-template<class T2>
-inline typename BinaryReturn<GammaConstDP<4,0>, PSpinMatrixREG<T2,4>, OpGammaConstDPMultiply>::Type_t
-operator*(const GammaConstDP<4,0>&, const PSpinMatrixREG<T2,4>& r)
-{
-  typename BinaryReturn<GammaConstDP<4,0>, PSpinMatrixREG<T2,4>, OpGammaConstDPMultiply>::Type_t  d(r.func());
-  
-  for(int i=0; i < 4; ++i)
-  {
-    d.elem(0,i) = r.elem(0,i);
-    d.elem(1,i) = r.elem(1,i);
-    d.elem(2,i) = r.elem(2,i);
-    d.elem(3,i) = r.elem(3,i);
-  }
-
-  return d;
-}
-
-template<class T2>
-inline typename BinaryReturn<GammaConstDP<4,1>, PSpinMatrixREG<T2,4>, OpGammaConstDPMultiply>::Type_t
-operator*(const GammaConstDP<4,1>&, const PSpinMatrixREG<T2,4>& r)
-{
-  typename BinaryReturn<GammaConstDP<4,1>, PSpinMatrixREG<T2,4>, OpGammaConstDPMultiply>::Type_t  d(r.func());
-  
-  for(int i=0; i < 4; ++i)
-  {
-    d.elem(0,i) = timesMinusI(r.elem(3,i));
-    d.elem(1,i) = timesMinusI(r.elem(2,i));
-    d.elem(2,i) = timesI(r.elem(1,i));
-    d.elem(3,i) = timesI(r.elem(0,i));
-  }
-
-  return d;
-}
-
-template<class T2>
-inline typename BinaryReturn<GammaConstDP<4,2>, PSpinMatrixREG<T2,4>, OpGammaConstDPMultiply>::Type_t
-operator*(const GammaConstDP<4,2>&, const PSpinMatrixREG<T2,4>& r)
-{
-  typename BinaryReturn<GammaConstDP<4,2>, PSpinMatrixREG<T2,4>, OpGammaConstDPMultiply>::Type_t  d(r.func());
-
-  for(int i=0; i < 4; ++i)
-  {
-    d.elem(0,i) = -r.elem(3,i);
-    d.elem(1,i) =  r.elem(2,i);
-    d.elem(2,i) =  r.elem(1,i);
-    d.elem(3,i) = -r.elem(0,i);
-  }
-  
-  return d;
-}
-
-template<class T2>
-inline typename BinaryReturn<GammaConstDP<4,3>, PSpinMatrixREG<T2,4>, OpGammaConstDPMultiply>::Type_t
-operator*(const GammaConstDP<4,3>&, const PSpinMatrixREG<T2,4>& r)
-{
-  typename BinaryReturn<GammaConstDP<4,3>, PSpinMatrixREG<T2,4>, OpGammaConstDPMultiply>::Type_t  d(r.func());
-
-  for(int i=0; i < 4; ++i)
-  {
-    d.elem(0,i) = timesI(r.elem(0,i));
-    d.elem(1,i) = timesMinusI(r.elem(1,i));
-    d.elem(2,i) = timesI(r.elem(2,i));
-    d.elem(3,i) = timesMinusI(r.elem(3,i));
-  }
-  
-  return d;
-}
-
-template<class T2>
-inline typename BinaryReturn<GammaConstDP<4,4>, PSpinMatrixREG<T2,4>, OpGammaConstDPMultiply>::Type_t
-operator*(const GammaConstDP<4,4>&, const PSpinMatrixREG<T2,4>& r)
-{
-  typename BinaryReturn<GammaConstDP<4,4>, PSpinMatrixREG<T2,4>, OpGammaConstDPMultiply>::Type_t  d(r.func());
-
-  for(int i=0; i < 4; ++i)
-  {
-    d.elem(0,i) = timesMinusI(r.elem(2,i));
-    d.elem(1,i) = timesI(r.elem(3,i));
-    d.elem(2,i) = timesI(r.elem(0,i));
-    d.elem(3,i) = timesMinusI(r.elem(1,i));
-  }
-  
-  return d;
-}
-
-template<class T2>
-inline typename BinaryReturn<GammaConstDP<4,5>, PSpinMatrixREG<T2,4>, OpGammaConstDPMultiply>::Type_t
-operator*(const GammaConstDP<4,5>&, const PSpinMatrixREG<T2,4>& r)
-{
-  typename BinaryReturn<GammaConstDP<4,5>, PSpinMatrixREG<T2,4>, OpGammaConstDPMultiply>::Type_t  d(r.func());
-
-  for(int i=0; i < 4; ++i)
-  {
-    d.elem(0,i) = -r.elem(1,i);
-    d.elem(1,i) =  r.elem(0,i);
-    d.elem(2,i) = -r.elem(3,i);
-    d.elem(3,i) =  r.elem(2,i);
-  }
-  
-  return d;
-}
-
-template<class T2>
-inline typename BinaryReturn<GammaConstDP<4,6>, PSpinMatrixREG<T2,4>, OpGammaConstDPMultiply>::Type_t
-operator*(const GammaConstDP<4,6>&, const PSpinMatrixREG<T2,4>& r)
-{
-  typename BinaryReturn<GammaConstDP<4,6>, PSpinMatrixREG<T2,4>, OpGammaConstDPMultiply>::Type_t  d(r.func());
-
-  for(int i=0; i < 4; ++i)
-  {
-    d.elem(0,i) = timesI(r.elem(1,i));
-    d.elem(1,i) = timesI(r.elem(0,i));
-    d.elem(2,i) = timesI(r.elem(3,i));
-    d.elem(3,i) = timesI(r.elem(2,i));
-  }
-  
-  return d;
-}
-
-template<class T2>
-inline typename BinaryReturn<GammaConstDP<4,7>, PSpinMatrixREG<T2,4>, OpGammaConstDPMultiply>::Type_t
-operator*(const GammaConstDP<4,7>&, const PSpinMatrixREG<T2,4>& r)
-{
-  typename BinaryReturn<GammaConstDP<4,7>, PSpinMatrixREG<T2,4>, OpGammaConstDPMultiply>::Type_t  d(r.func());
-
-  for(int i=0; i < 4; ++i)
-  {
-    d.elem(0,i) =  r.elem(2,i);
-    d.elem(1,i) =  r.elem(3,i);
-    d.elem(2,i) = -r.elem(0,i);
-    d.elem(3,i) = -r.elem(1,i);
-  }
-  
-  return d;
-}
-
-template<class T2>
-inline typename BinaryReturn<GammaConstDP<4,8>, PSpinMatrixREG<T2,4>, OpGammaConstDPMultiply>::Type_t
-operator*(const GammaConstDP<4,8>&, const PSpinMatrixREG<T2,4>& r)
-{
-  typename BinaryReturn<GammaConstDP<4,8>, PSpinMatrixREG<T2,4>, OpGammaConstDPMultiply>::Type_t  d(r.func());
-
-  for(int i=0; i < 4; ++i)
-  {
-    d.elem(0,i) =  r.elem(0,i);
-    d.elem(1,i) =  r.elem(1,i);
-    d.elem(2,i) = -r.elem(2,i);
-    d.elem(3,i) = -r.elem(3,i);
-  }
-  
-  return d;
-}
-
-template<class T2>
-inline typename BinaryReturn<GammaConstDP<4,9>, PSpinMatrixREG<T2,4>, OpGammaConstDPMultiply>::Type_t
-operator*(const GammaConstDP<4,9>&, const PSpinMatrixREG<T2,4>& r)
-{
-  typename BinaryReturn<GammaConstDP<4,9>, PSpinMatrixREG<T2,4>, OpGammaConstDPMultiply>::Type_t  d(r.func());
-
-  for(int i=0; i < 4; ++i)
-  {
-    d.elem(0,i) = timesI(r.elem(3,i));
-    d.elem(1,i) = timesI(r.elem(2,i));
-    d.elem(2,i) = timesI(r.elem(1,i));
-    d.elem(3,i) = timesI(r.elem(0,i));
-  }
-  
-  return d;
-}
-
-template<class T2>
-inline typename BinaryReturn<GammaConstDP<4,10>, PSpinMatrixREG<T2,4>, OpGammaConstDPMultiply>::Type_t
-operator*(const GammaConstDP<4,10>&, const PSpinMatrixREG<T2,4>& r)
-{
-  typename BinaryReturn<GammaConstDP<4,10>, PSpinMatrixREG<T2,4>, OpGammaConstDPMultiply>::Type_t  d(r.func());
-
-  for(int i=0; i < 4; ++i)
-  {
-    d.elem(0,i) =  r.elem(3,i);
-    d.elem(1,i) = -r.elem(2,i);
-    d.elem(2,i) = -r.elem(1,i);
-    d.elem(3,i) =  r.elem(0,i);
-  }
-  
-  return d;
-}
-
-template<class T2>
-inline typename BinaryReturn<GammaConstDP<4,11>, PSpinMatrixREG<T2,4>, OpGammaConstDPMultiply>::Type_t
-operator*(const GammaConstDP<4,11>&, const PSpinMatrixREG<T2,4>& r)
-{
-  typename BinaryReturn<GammaConstDP<4,11>, PSpinMatrixREG<T2,4>, OpGammaConstDPMultiply>::Type_t  d(r.func());
-
-  for(int i=0; i < 4; ++i)
-  {
-    d.elem(0,i) = timesI(r.elem(0,i));
-    d.elem(1,i) = timesMinusI(r.elem(1,i));
-    d.elem(2,i) = timesMinusI(r.elem(2,i));
-    d.elem(3,i) = timesI(r.elem(3,i));
-  }
-  
-  return d;
-}
-
-template<class T2>
-inline typename BinaryReturn<GammaConstDP<4,12>, PSpinMatrixREG<T2,4>, OpGammaConstDPMultiply>::Type_t
-operator*(const GammaConstDP<4,12>&, const PSpinMatrixREG<T2,4>& r)
-{
-  typename BinaryReturn<GammaConstDP<4,12>, PSpinMatrixREG<T2,4>, OpGammaConstDPMultiply>::Type_t  d(r.func());
-
-  for(int i=0; i < 4; ++i)
-  {
-    d.elem(0,i) = timesI(r.elem(2,i));
-    d.elem(1,i) = timesMinusI(r.elem(3,i));
-    d.elem(2,i) = timesI(r.elem(0,i));
-    d.elem(3,i) = timesMinusI(r.elem(1,i));
-  }
-  
-  return d;
-}
-
-template<class T2>
-inline typename BinaryReturn<GammaConstDP<4,13>, PSpinMatrixREG<T2,4>, OpGammaConstDPMultiply>::Type_t
-operator*(const GammaConstDP<4,13>&, const PSpinMatrixREG<T2,4>& r)
-{
-  typename BinaryReturn<GammaConstDP<4,13>, PSpinMatrixREG<T2,4>, OpGammaConstDPMultiply>::Type_t  d(r.func());
-
-  for(int i=0; i < 4; ++i)
-  {
-    d.elem(0,i) = -r.elem(1,i);
-    d.elem(1,i) =  r.elem(0,i);
-    d.elem(2,i) =  r.elem(3,i);
-    d.elem(3,i) = -r.elem(2,i);
-  }
-  
-  return d;
-}
-
-template<class T2>
-inline typename BinaryReturn<GammaConstDP<4,14>, PSpinMatrixREG<T2,4>, OpGammaConstDPMultiply>::Type_t
-operator*(const GammaConstDP<4,14>&, const PSpinMatrixREG<T2,4>& r)
-{
-  typename BinaryReturn<GammaConstDP<4,14>, PSpinMatrixREG<T2,4>, OpGammaConstDPMultiply>::Type_t  d(r.func());
-
-  for(int i=0; i < 4; ++i)
-  {
-    d.elem(0,i) = timesI(r.elem(1,i));
-    d.elem(1,i) = timesI(r.elem(0,i));
-    d.elem(2,i) = timesMinusI(r.elem(3,i));
-    d.elem(3,i) = timesMinusI(r.elem(2,i));
-  }
-  
-  return d;
-}
-
-template<class T2>
-inline typename BinaryReturn<GammaConstDP<4,15>, PSpinMatrixREG<T2,4>, OpGammaConstDPMultiply>::Type_t
-operator*(const GammaConstDP<4,15>&, const PSpinMatrixREG<T2,4>& r)
-{
-  typename BinaryReturn<GammaConstDP<4,15>, PSpinMatrixREG<T2,4>, OpGammaConstDPMultiply>::Type_t  d(r.func());
-
-  for(int i=0; i < 4; ++i)
-  {
-    d.elem(0,i) = -r.elem(2,i);
-    d.elem(1,i) = -r.elem(3,i);
-    d.elem(2,i) = -r.elem(0,i);
-    d.elem(3,i) = -r.elem(1,i);
-  }
-  
-  return d;
-}
-
-
-// SpinMatrix<4> = SpinMatrix<4> * GammaDP<4,m>
-// There are 16 cases here for Nd=4
-template<class T2>
-inline typename BinaryReturn<PSpinMatrixREG<T2,4>, GammaConstDP<4,0>, OpGammaConstDPMultiply>::Type_t
-operator*(const PSpinMatrixREG<T2,4>& l, const GammaConstDP<4,0>&)
-{
-  typename BinaryReturn<PSpinMatrixREG<T2,4>, GammaConstDP<4,0>, OpGammaConstDPMultiply>::Type_t  d; 
-
-  for(int i=0; i < 4; ++i)
-  {
-    d.elem(i,0) =  l.elem(i,0);
-    d.elem(i,1) =  l.elem(i,1);
-    d.elem(i,2) =  l.elem(i,2);
-    d.elem(i,3) =  l.elem(i,3);
-  }
- 
-  return d;
-}
-
-template<class T2>
-inline typename BinaryReturn<PSpinMatrixREG<T2,4>, GammaConstDP<4,1>, OpGammaConstDPMultiply>::Type_t
-operator*(const PSpinMatrixREG<T2,4>& l, const GammaConstDP<4,1>&)
-{
-  typename BinaryReturn<PSpinMatrixREG<T2,4>, GammaConstDP<4,1>, OpGammaConstDPMultiply>::Type_t  d;
-
-  for(int i=0; i < 4; ++i)
-  {
-    d.elem(i,0) = timesMinusI(l.elem(i,3));
-    d.elem(i,1) = timesMinusI(l.elem(i,2));
-    d.elem(i,2) = timesI(l.elem(i,1));
-    d.elem(i,3) = timesI(l.elem(i,0));
-  }
-  
-  return d;
-}
-
-template<class T2>
-inline typename BinaryReturn<PSpinMatrixREG<T2,4>, GammaConstDP<4,2>, OpGammaConstDPMultiply>::Type_t
-operator*(const PSpinMatrixREG<T2,4>& l, const GammaConstDP<4,2>&)
-{
-  typename BinaryReturn<PSpinMatrixREG<T2,4>, GammaConstDP<4,2>, OpGammaConstDPMultiply>::Type_t  d;
-
-  for(int i=0; i < 4; ++i)
-  {
-    d.elem(i,0) = -l.elem(i,3);
-    d.elem(i,1) =  l.elem(i,2);
-    d.elem(i,2) =  l.elem(i,1);
-    d.elem(i,3) = -l.elem(i,0);
-  }
-  
-  return d;
-}
-
-template<class T2>
-inline typename BinaryReturn<PSpinMatrixREG<T2,4>, GammaConstDP<4,3>, OpGammaConstDPMultiply>::Type_t
-operator*(const PSpinMatrixREG<T2,4>& l, const GammaConstDP<4,3>&)
-{
-  typename BinaryReturn<PSpinMatrixREG<T2,4>, GammaConstDP<4,3>, OpGammaConstDPMultiply>::Type_t  d;
-
-  for(int i=0; i < 4; ++i)
-  {
-    d.elem(i,0) = timesI(l.elem(i,0));
-    d.elem(i,1) = timesMinusI(l.elem(i,1));
-    d.elem(i,2) = timesI(l.elem(i,2));
-    d.elem(i,3) = timesMinusI(l.elem(i,3));
-  }
-  
-  return d;
-}
-
-template<class T2>
-inline typename BinaryReturn<PSpinMatrixREG<T2,4>, GammaConstDP<4,4>, OpGammaConstDPMultiply>::Type_t
-operator*(const PSpinMatrixREG<T2,4>& l, const GammaConstDP<4,4>&)
-{
-  typename BinaryReturn<PSpinMatrixREG<T2,4>, GammaConstDP<4,4>, OpGammaConstDPMultiply>::Type_t  d;
-
-  for(int i=0; i < 4; ++i)
-  {
-    d.elem(i,0) = timesMinusI(l.elem(i,2));
-    d.elem(i,1) = timesI(l.elem(i,3));
-    d.elem(i,2) = timesI(l.elem(i,0));
-    d.elem(i,3) = timesMinusI(l.elem(i,1));
-  }
-  
-  return d;
-}
-
-template<class T2>
-inline typename BinaryReturn<PSpinMatrixREG<T2,4>, GammaConstDP<4,5>, OpGammaConstDPMultiply>::Type_t
-operator*(const PSpinMatrixREG<T2,4>& l, const GammaConstDP<4,5>&)
-{
-  typename BinaryReturn<PSpinMatrixREG<T2,4>, GammaConstDP<4,5>, OpGammaConstDPMultiply>::Type_t  d;
-
-  for(int i=0; i < 4; ++i)
-  {
-    d.elem(i,0) = -l.elem(i,1);
-    d.elem(i,1) =  l.elem(i,0);
-    d.elem(i,2) = -l.elem(i,3);
-    d.elem(i,3) =  l.elem(i,2);
-  }
-  
-  return d;
-}
-
-template<class T2>
-inline typename BinaryReturn<PSpinMatrixREG<T2,4>, GammaConstDP<4,6>, OpGammaConstDPMultiply>::Type_t
-operator*(const PSpinMatrixREG<T2,4>& l, const GammaConstDP<4,6>&)
-{
-  typename BinaryReturn<PSpinMatrixREG<T2,4>, GammaConstDP<4,6>, OpGammaConstDPMultiply>::Type_t  d;
-
-  for(int i=0; i < 4; ++i)
-  {
-    d.elem(i,0) = timesI(l.elem(i,1));
-    d.elem(i,1) = timesI(l.elem(i,0));
-    d.elem(i,2) = timesI(l.elem(i,3));
-    d.elem(i,3) = timesI(l.elem(i,2));
-  }
-  
-  return d;
-}
-
-template<class T2>
-inline typename BinaryReturn<PSpinMatrixREG<T2,4>, GammaConstDP<4,7>, OpGammaConstDPMultiply>::Type_t
-operator*(const PSpinMatrixREG<T2,4>& l, const GammaConstDP<4,7>&)
-{
-  typename BinaryReturn<PSpinMatrixREG<T2,4>, GammaConstDP<4,7>, OpGammaConstDPMultiply>::Type_t  d;
-
-  for(int i=0; i < 4; ++i)
-  {
-    d.elem(i,0) =  l.elem(i,2);
-    d.elem(i,1) =  l.elem(i,3);
-    d.elem(i,2) = -l.elem(i,0);
-    d.elem(i,3) = -l.elem(i,1);
-  }
-  
-  return d;
-}
-
-template<class T2>
-inline typename BinaryReturn<PSpinMatrixREG<T2,4>, GammaConstDP<4,8>, OpGammaConstDPMultiply>::Type_t
-operator*(const PSpinMatrixREG<T2,4>& l, const GammaConstDP<4,8>&)
-{
-  typename BinaryReturn<PSpinMatrixREG<T2,4>, GammaConstDP<4,8>, OpGammaConstDPMultiply>::Type_t  d;
-
-  for(int i=0; i < 4; ++i)
-  {
-    d.elem(i,0) =  l.elem(i,0);
-    d.elem(i,1) =  l.elem(i,1);
-    d.elem(i,2) = -l.elem(i,2);
-    d.elem(i,3) = -l.elem(i,3);
-  }
-  
-  return d;
-}
-
-template<class T2>
-inline typename BinaryReturn<PSpinMatrixREG<T2,4>, GammaConstDP<4,9>, OpGammaConstDPMultiply>::Type_t
-operator*(const PSpinMatrixREG<T2,4>& l, const GammaConstDP<4,9>&)
-{
-  typename BinaryReturn<PSpinMatrixREG<T2,4>, GammaConstDP<4,9>, OpGammaConstDPMultiply>::Type_t  d;
-
-  for(int i=0; i < 4; ++i)
-  {
-    d.elem(i,0) = timesI(l.elem(i,3));
-    d.elem(i,1) = timesI(l.elem(i,2));
-    d.elem(i,2) = timesI(l.elem(i,1));
-    d.elem(i,3) = timesI(l.elem(i,0));
-  }
-  
-  return d;
-}
-
-template<class T2>
-inline typename BinaryReturn<PSpinMatrixREG<T2,4>, GammaConstDP<4,10>, OpGammaConstDPMultiply>::Type_t
-operator*(const PSpinMatrixREG<T2,4>& l, const GammaConstDP<4,10>&)
-{
-  typename BinaryReturn<PSpinMatrixREG<T2,4>, GammaConstDP<4,10>, OpGammaConstDPMultiply>::Type_t  d;
-
-  for(int i=0; i < 4; ++i)
-  {
-    d.elem(i,0) =  l.elem(i,3);
-    d.elem(i,1) = -l.elem(i,2);
-    d.elem(i,2) = -l.elem(i,1);
-    d.elem(i,3) =  l.elem(i,0);
-  }
-  
-  return d;
-}
-
-template<class T2>
-inline typename BinaryReturn<PSpinMatrixREG<T2,4>, GammaConstDP<4,11>, OpGammaConstDPMultiply>::Type_t
-operator*(const PSpinMatrixREG<T2,4>& l, const GammaConstDP<4,11>&)
-{
-  typename BinaryReturn<PSpinMatrixREG<T2,4>, GammaConstDP<4,11>, OpGammaConstDPMultiply>::Type_t  d;
-
-  for(int i=0; i < 4; ++i)
-  {
-    d.elem(i,0) = timesI(l.elem(i,0));
-    d.elem(i,1) = timesMinusI(l.elem(i,1));
-    d.elem(i,2) = timesMinusI(l.elem(i,2));
-    d.elem(i,3) = timesI(l.elem(i,3));
-  }
-  
-  return d;
-}
-
-template<class T2>
-inline typename BinaryReturn<PSpinMatrixREG<T2,4>, GammaConstDP<4,12>, OpGammaConstDPMultiply>::Type_t
-operator*(const PSpinMatrixREG<T2,4>& l, const GammaConstDP<4,12>&)
-{
-  typename BinaryReturn<PSpinMatrixREG<T2,4>, GammaConstDP<4,12>, OpGammaConstDPMultiply>::Type_t  d;
-
-  for(int i=0; i < 4; ++i)
-  {
-    d.elem(i,0) = timesI(l.elem(i,2));
-    d.elem(i,1) = timesMinusI(l.elem(i,3));
-    d.elem(i,2) = timesI(l.elem(i,0));
-    d.elem(i,3) = timesMinusI(l.elem(i,1));
-  }
-  
-  return d;
-}
-
-template<class T2>
-inline typename BinaryReturn<PSpinMatrixREG<T2,4>, GammaConstDP<4,13>, OpGammaConstDPMultiply>::Type_t
-operator*(const PSpinMatrixREG<T2,4>& l, const GammaConstDP<4,13>&)
-{
-  typename BinaryReturn<PSpinMatrixREG<T2,4>, GammaConstDP<4,13>, OpGammaConstDPMultiply>::Type_t  d;
-
-  for(int i=0; i < 4; ++i)
-  {
-    d.elem(i,0) = -l.elem(i,1);
-    d.elem(i,1) =  l.elem(i,0);
-    d.elem(i,2) =  l.elem(i,3);
-    d.elem(i,3) = -l.elem(i,2);
-  }
-  
-  return d;
-}
-
-template<class T2>
-inline typename BinaryReturn<PSpinMatrixREG<T2,4>, GammaConstDP<4,14>, OpGammaConstDPMultiply>::Type_t
-operator*(const PSpinMatrixREG<T2,4>& l, const GammaConstDP<4,14>&)
-{
-  typename BinaryReturn<PSpinMatrixREG<T2,4>, GammaConstDP<4,14>, OpGammaConstDPMultiply>::Type_t  d;
-
-  for(int i=0; i < 4; ++i)
-  {
-    d.elem(i,0) = timesI(l.elem(i,1));
-    d.elem(i,1) = timesI(l.elem(i,0));
-    d.elem(i,2) = timesMinusI(l.elem(i,3));
-    d.elem(i,3) = timesMinusI(l.elem(i,2));
-  }
-  
-  return d;
-}
-
-template<class T2>
-inline typename BinaryReturn<PSpinMatrixREG<T2,4>, GammaConstDP<4,15>, OpGammaConstDPMultiply>::Type_t
-operator*(const PSpinMatrixREG<T2,4>& l, const GammaConstDP<4,15>&)
-{
-  typename BinaryReturn<PSpinMatrixREG<T2,4>, GammaConstDP<4,15>, OpGammaConstDPMultiply>::Type_t  d;
-
-  for(int i=0; i < 4; ++i)
-  {
-    d.elem(i,0) = -l.elem(i,2);
-    d.elem(i,1) = -l.elem(i,3);
-    d.elem(i,2) = -l.elem(i,0);
-    d.elem(i,3) = -l.elem(i,1);
-  }
-  
-  return d;
-}
 
 
 //-----------------------------------------------------------------------------
@@ -1756,11 +1321,12 @@ quarkContract13(const PSpinMatrixREG<T1,4>& s1, const PSpinMatrixREG<T2,4>& s2)
     {
       d.elem(i,j) = quarkContractXX(s1.elem(0,i), s2.elem(0,j));
       for(int k=1; k < 4; ++k)
-	d.elem(i,j) += quarkContractXX(s1.elem(k,i), s2.elem(k,j));
+       	d.elem(i,j) += quarkContractXX(s1.elem(k,i), s2.elem(k,j));
     }
-
+  
   return d;
 }
+  
 
 template<class T1, class T2>
 inline typename BinaryReturn<PSpinMatrixREG<T1,4>, PSpinMatrixREG<T2,4>, FnQuarkContract14>::Type_t
@@ -1779,6 +1345,7 @@ quarkContract14(const PSpinMatrixREG<T1,4>& s1, const PSpinMatrixREG<T2,4>& s2)
   return d;
 }
 
+  
 template<class T1, class T2>
 inline typename BinaryReturn<PSpinMatrixREG<T1,4>, PSpinMatrixREG<T2,4>, FnQuarkContract23>::Type_t
 quarkContract23(const PSpinMatrixREG<T1,4>& s1, const PSpinMatrixREG<T2,4>& s2)
@@ -1792,10 +1359,11 @@ quarkContract23(const PSpinMatrixREG<T1,4>& s1, const PSpinMatrixREG<T2,4>& s2)
       for(int k=1; k < 4; ++k)
 	d.elem(i,j) += quarkContractXX(s1.elem(i,k), s2.elem(k,j));
     }
-
+  
   return d;
 }
 
+  
 template<class T1, class T2>
 inline typename BinaryReturn<PSpinMatrixREG<T1,4>, PSpinMatrixREG<T2,4>, FnQuarkContract24>::Type_t
 quarkContract24(const PSpinMatrixREG<T1,4>& s1, const PSpinMatrixREG<T2,4>& s2)
@@ -1809,10 +1377,11 @@ quarkContract24(const PSpinMatrixREG<T1,4>& s1, const PSpinMatrixREG<T2,4>& s2)
       for(int k=1; k < 4; ++k)
 	d.elem(i,j) += quarkContractXX(s1.elem(i,k), s2.elem(j,k));
     }
-
+  
   return d;
 }
 
+  
 template<class T1, class T2>
 inline typename BinaryReturn<PSpinMatrixREG<T1,4>, PSpinMatrixREG<T2,4>, FnQuarkContract12>::Type_t
 quarkContract12(const PSpinMatrixREG<T1,4>& s1, const PSpinMatrixREG<T2,4>& s2)
@@ -1830,6 +1399,7 @@ quarkContract12(const PSpinMatrixREG<T1,4>& s1, const PSpinMatrixREG<T2,4>& s2)
   return d;
 }
 
+  
 template<class T1, class T2>
 inline typename BinaryReturn<PSpinMatrixREG<T1,4>, PSpinMatrixREG<T2,4>, FnQuarkContract34>::Type_t
 quarkContract34(const PSpinMatrixREG<T1,4>& s1, const PSpinMatrixREG<T2,4>& s2)

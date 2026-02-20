@@ -1,32 +1,31 @@
 #ifndef QDP_JITF_GAUSS_H
 #define QDP_JITF_GAUSS_H
 
-#include "qmp.h"
 
 namespace QDP {
 
 template<class T>
-CUfunction
-function_gaussian_build(OLattice<T>& dest ,OLattice<T>& r1 ,OLattice<T>& r2 )
+void
+function_gaussian_build( JitFunction& function, OLattice<T>& dest ,OLattice<T>& r1 ,OLattice<T>& r2 )
 {
-  if (ptx_db::db_enabled) {
-    CUfunction func = llvm_ptx_db( __PRETTY_FUNCTION__ );
-    if (func)
-      return func;
-  }
+  llvm_start_new_function("gaussian",__PRETTY_FUNCTION__);
 
-  std::vector<ParamRef> params = jit_function_preamble_param();
+  WorkgroupGuard workgroupGuard;
+  ParamRef p_site_table = llvm_add_param<int*>();
 
-  ParamLeaf param_leaf;
+  ParamLeafScalar param_leaf;
 
-  typedef typename LeafFunctor<OLattice<T>, ParamLeaf>::Type_t  FuncRet_t;
+  typedef typename LeafFunctor<OLattice<T>, ParamLeafScalar>::Type_t  FuncRet_t;
   FuncRet_t dest_jit(forEach(dest, param_leaf, TreeCombine()));
   FuncRet_t r1_jit(forEach(r1, param_leaf, TreeCombine()));
   FuncRet_t r2_jit(forEach(r2, param_leaf, TreeCombine()));
 
-  llvm::Value * r_idx = jit_function_preamble_get_idx( params );
+  llvm::Value* r_idx_thread = llvm_thread_idx();
+  workgroupGuard.check(r_idx_thread);
 
-  typedef typename REGType< typename JITType<T>::Type_t >::Type_t TREG;
+  llvm::Value* r_idx = llvm_array_type_indirection<int>( p_site_table , r_idx_thread );
+  
+  typedef typename REGType< typename ScalarType< typename JITType<T>::Type_t >::Type_t >::Type_t TREG;
   TREG r1_reg;
   TREG r2_reg;
   r1_reg.setup( r1_jit.elem( JitDeviceLayout::Coalesced , r_idx ) );
@@ -34,53 +33,42 @@ function_gaussian_build(OLattice<T>& dest ,OLattice<T>& r1 ,OLattice<T>& r2 )
 
   fill_gaussian( dest_jit.elem(JitDeviceLayout::Coalesced , r_idx ) , r1_reg , r2_reg );
 
-  return jit_function_epilogue_get_cuf("jit_gaussian.ptx" , __PRETTY_FUNCTION__ );
+  jit_get_function(function);
 }
 
 
 template<class T>
 void 
-function_gaussian_exec(CUfunction function, OLattice<T>& dest,OLattice<T>& r1,OLattice<T>& r2, const Subset& s )
+function_gaussian_exec(JitFunction& function, OLattice<T>& dest,OLattice<T>& r1,OLattice<T>& r2, const Subset& s )
 {
+  if (s.numSiteTable() < 1)
+    return;
+
+#ifdef QDP_DEEP_LOG
+  function.type_W = typeid(typename WordType<T>::Type_t).name();
+  function.set_dest_id( dest.getId() );
+  function.set_is_lat(true);
+#endif
+
   AddressLeaf addr_leaf(s);
 
   forEach(dest, addr_leaf, NullCombine());
   forEach(r1, addr_leaf, NullCombine());
   forEach(r2, addr_leaf, NullCombine());
 
-  int start = s.start();
-  int end = s.end();
-  bool ordered = s.hasOrderedRep();
-  int th_count = ordered ? s.numSiteTable() : Layout::sitesOnNode();
+  int th_count = s.numSiteTable();
+  WorkgroupGuardExec workgroupGuardExec(th_count);
 
-  JitParam jit_ordered( QDP_get_global_cache().addJitParamBool( s.hasOrderedRep() ) );
-  JitParam jit_th_count( QDP_get_global_cache().addJitParamInt( th_count ) );
-  JitParam jit_start( QDP_get_global_cache().addJitParamInt( s.start() ) );
-  JitParam jit_end( QDP_get_global_cache().addJitParamInt( s.end() ) );
-
-  std::vector<int> ids;
-  ids.push_back( jit_ordered.get_id() );
-  ids.push_back( jit_th_count.get_id() );
-  ids.push_back( jit_start.get_id() );
-  ids.push_back( jit_end.get_id() );
-  ids.push_back( s.getIdMemberTable() );
+  std::vector<QDPCache::ArgKey> ids;
+  workgroupGuardExec.check(ids);
+  ids.push_back( s.getIdSiteTable() );
   for(unsigned i=0; i < addr_leaf.ids.size(); ++i)
     ids.push_back( addr_leaf.ids[i] );
   
-  jit_launch(function,Layout::sitesOnNode(),ids);
-#if 0
-  void * subset_member = QDP_get_global_cache().getDevicePtr( s.getIdMemberTable() );
-  
-  std::vector<void*> addr;
-  addr.push_back( &ordered );
-  addr.push_back( &th_count );
-  addr.push_back( &start );
-  addr.push_back( &end );
-  addr.push_back( &subset_member );
-  for(unsigned i=0; i < addr_leaf.addr.size(); ++i) {
-    addr.push_back( &addr_leaf.addr[i] );
-  }
-  jit_launch(function,th_count,addr);
+  jit_launch(function,th_count,ids);
+
+#ifdef QDP_DEEP_LOG
+  QDP_get_global_logger().log(dest,s);
 #endif
 }
 

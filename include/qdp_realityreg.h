@@ -16,7 +16,7 @@ namespace QDP {
 
 
 template<class T>
-class RScalarREG //: public BaseREG<T,1,RScalarREG<T> >
+class RScalarREG
 {
   T F;
 public:
@@ -25,16 +25,21 @@ public:
     F.setup( rhs.elem() );
   }
 
+  void setup_value(const RScalarJIT< typename JITType<T>::Type_t >& rhs ) {
+    F.setup_value( rhs.elem() );
+  }
+
+  
   RScalarREG(const RScalarJIT< typename JITType<T>::Type_t >& rhs ) {
     setup( rhs.elem() );
   }
 
-  // RScalarREG& operator=( const RScalarJIT< typename JITType<T>::Type_t >& rhs) {
-  //   setup(rhs);
-  //   return *this;
-  // }
+  RScalarREG(const typename WordType<T>::Type_t& rhs)
+  {
+    F.setup( llvm_create_value(rhs) );
+  }
 
-
+  
   // Default constructing should be possible
   // then there is no need for MPL index when
   // construction a PMatrix<T,N>
@@ -56,14 +61,6 @@ public:
     elem() = rhs;
     return *this;
   }
-
-
-#if 0
-  //---------------------------------------------------------
-  //! construct dest = const
-#endif
-
-  //RScalarREG(const typename WordType<T>::Type_t& rhs) : JV<T,1>( NULL , rhs ) {}
 
 
   //! construct dest = rhs
@@ -236,9 +233,6 @@ public:
 public:
   inline       T& elem()       { return F; }
   inline const T& elem() const { return F; }
-
-  // inline       T& elem()       { return this->arrayF(0); }
-  // inline const T& elem() const { return this->arrayF(0); }
 };
 
  
@@ -333,11 +327,12 @@ public:
     im.setup( rhs.imag() );
   }
 
-  // RComplexREG& operator=( const RComplexJIT< typename JITType<T>::Type_t >& rhs) {
-  //   setup(rhs);
-  //   return *this;
-  // }
+  void setup_value(const RComplexJIT< typename JITType<T>::Type_t >& rhs ) {
+    re.setup_value( rhs.real() );
+    im.setup_value( rhs.imag() );
+  }
 
+  
   RComplexREG( const RComplexJIT< typename JITType<T>::Type_t >& rhs) {
     setup(rhs);
   }
@@ -356,15 +351,40 @@ public:
     imag() = _im.elem();
   }
 
-  //! Construct from two scalars
-  //RComplexREG(Jit& j,const typename WordType<T>::Type_t& re, const typename WordType<T>::Type_t& im): JV<T,2>(j,re,im) {}
-
-
-  RComplexREG(const T& re,const T& im) {
+  
+  RComplexREG(const WordREG<typename WordType<T>::Type_t>& re,
+	      const WordREG<typename WordType<T>::Type_t>& im) {
     real() = re;
     imag() = im;
   }
 
+
+#if defined (QDP_CODEGEN_VECTOR)
+  RComplexREG(const WordVecREG<typename WordType<T>::Type_t>& re,
+	      const WordREG   <typename WordType<T>::Type_t>& im) {
+    real() = re;
+
+    WordVecREG<typename WordType<T>::Type_t> tmp;
+    tmp.setup( llvm_fill_vector( im.get_val() ) );
+    imag() = tmp;
+  }
+
+  RComplexREG(const WordREG   <typename WordType<T>::Type_t>& re,
+	      const WordVecREG<typename WordType<T>::Type_t>& im) {
+    WordVecREG<typename WordType<T>::Type_t> tmp;
+    tmp.setup( llvm_fill_vector( re.get_val() ) );
+    real() = tmp;
+    
+    imag() = im;
+  }
+
+  RComplexREG(const WordVecREG<typename WordType<T>::Type_t>& re,
+	      const WordVecREG<typename WordType<T>::Type_t>& im) {
+    real() = re;
+    imag() = im;
+  }
+#endif
+  
 
   //! RComplexREG += RScalarREG
   template<class T1>
@@ -617,6 +637,22 @@ void read(XMLReader& xml, const string& xpath, RComplexREG<T>& d)
 // Traits classes 
 //-----------------------------------------------------------------------------
 
+
+  template <class T>
+  struct IsWordVec< RScalarREG<T> >
+  {
+    constexpr static bool value = IsWordVec<T>::value;
+  };
+
+
+  template <class T>
+  struct IsWordVec< RComplexREG<T> >
+  {
+    constexpr static bool value = IsWordVec<T>::value;
+  };
+
+
+  
 template<class T> 
 struct JITType< RScalarREG<T> >
 {
@@ -824,96 +860,6 @@ struct TrinaryReturn<RScalarREG<T1>, RScalarREG<T2>, RScalarREG<T3>, FnColorCont
   typedef RScalarREG<typename TrinaryReturn<T1, T2, T3, FnColorContract>::Type_t>  Type_t;
 };
 
-// RScalarREG
-// Gamma algebra
-template<int N, int m, class T2, class OpGammaConstMultiply>
-struct BinaryReturn<GammaConst<N,m>, RScalarREG<T2>, OpGammaConstMultiply> {
-  typedef RScalarREG<typename UnaryReturn<T2, OpUnaryPlus>::Type_t>  Type_t;
-};
-
-template<class T2, int N, int m, class OpMultiplyGammaConst>
-struct BinaryReturn<RScalarREG<T2>, GammaConst<N,m>, OpMultiplyGammaConst> {
-  typedef RScalarREG<typename UnaryReturn<T2, OpUnaryPlus>::Type_t>  Type_t;
-};
-
-template<class T2, int N, class OpGammaTypeMultiply>
-struct BinaryReturn<GammaType<N>, RScalarREG<T2>, OpGammaTypeMultiply> {
-  typedef RScalarREG<typename UnaryReturn<T2, OpUnaryPlus>::Type_t>  Type_t;
-};
-
-template<class T2, int N, class OpMultiplyGammaType>
-struct BinaryReturn<RScalarREG<T2>, GammaType<N>, OpMultiplyGammaType> {
-  typedef RScalarREG<typename UnaryReturn<T2, OpUnaryPlus>::Type_t>  Type_t;
-};
-
-
-// RScalarREG
-// Gamma algebra
-template<int N, int m, class T2, class OpGammaConstDPMultiply>
-struct BinaryReturn<GammaConstDP<N,m>, RScalarREG<T2>, OpGammaConstDPMultiply> {
-  typedef RScalarREG<typename UnaryReturn<T2, OpUnaryPlus>::Type_t>  Type_t;
-};
-
-template<class T2, int N, int m, class OpMultiplyGammaConstDP>
-struct BinaryReturn<RScalarREG<T2>, GammaConstDP<N,m>, OpMultiplyGammaConstDP> {
-  typedef RScalarREG<typename UnaryReturn<T2, OpUnaryPlus>::Type_t>  Type_t;
-};
-
-template<class T2, int N, class OpGammaTypeDPMultiply>
-struct BinaryReturn<GammaTypeDP<N>, RScalarREG<T2>, OpGammaTypeDPMultiply> {
-  typedef RScalarREG<typename UnaryReturn<T2, OpUnaryPlus>::Type_t>  Type_t;
-};
-
-template<class T2, int N, class OpMultiplyGammaTypeDP>
-struct BinaryReturn<RScalarREG<T2>, GammaTypeDP<N>, OpMultiplyGammaTypeDP> {
-  typedef RScalarREG<typename UnaryReturn<T2, OpUnaryPlus>::Type_t>  Type_t;
-};
-
-
-
-// RComplexREG
-// Gamma algebra
-template<int N, int m, class T2, class OpGammaConstMultiply>
-struct BinaryReturn<GammaConst<N,m>, RComplexREG<T2>, OpGammaConstMultiply> {
-  typedef RComplexREG<typename UnaryReturn<T2, OpUnaryPlus>::Type_t>  Type_t;
-};
-
-template<class T2, int N, int m, class OpMultiplyGammaConst>
-struct BinaryReturn<RComplexREG<T2>, GammaConst<N,m>, OpMultiplyGammaConst> {
-  typedef RComplexREG<typename UnaryReturn<T2, OpUnaryPlus>::Type_t>  Type_t;
-};
-
-template<class T2, int N, class OpGammaTypeMultiply>
-struct BinaryReturn<GammaType<N>, RComplexREG<T2>, OpGammaTypeMultiply> {
-  typedef RComplexREG<typename UnaryReturn<T2, OpUnaryPlus>::Type_t>  Type_t;
-};
-
-template<class T2, int N, class OpMultiplyGammaType>
-struct BinaryReturn<RComplexREG<T2>, GammaType<N>, OpMultiplyGammaType> {
-  typedef RComplexREG<typename UnaryReturn<T2, OpUnaryPlus>::Type_t>  Type_t;
-};
-
-
-// Gamma algebra
-template<int N, int m, class T2, class OpGammaConstDPMultiply>
-struct BinaryReturn<GammaConstDP<N,m>, RComplexREG<T2>, OpGammaConstDPMultiply> {
-  typedef RComplexREG<typename UnaryReturn<T2, OpUnaryPlus>::Type_t>  Type_t;
-};
-
-template<class T2, int N, int m, class OpMultiplyGammaConstDP>
-struct BinaryReturn<RComplexREG<T2>, GammaConstDP<N,m>, OpMultiplyGammaConstDP> {
-  typedef RComplexREG<typename UnaryReturn<T2, OpUnaryPlus>::Type_t>  Type_t;
-};
-
-template<class T2, int N, class OpGammaTypeDPMultiply>
-struct BinaryReturn<GammaTypeDP<N>, RComplexREG<T2>, OpGammaTypeDPMultiply> {
-  typedef RComplexREG<typename UnaryReturn<T2, OpUnaryPlus>::Type_t>  Type_t;
-};
-
-template<class T2, int N, class OpMultiplyGammaTypeDP>
-struct BinaryReturn<RComplexREG<T2>, GammaTypeDP<N>, OpMultiplyGammaTypeDP> {
-  typedef RComplexREG<typename UnaryReturn<T2, OpUnaryPlus>::Type_t>  Type_t;
-};
 
 
 // Assignment is different
@@ -1540,18 +1486,6 @@ outerProduct(const RScalarREG<T1>& l, const RScalarREG<T2>& r)
 }
 
 
-template<class T>
-struct UnaryReturn<RScalarREG<T>, FnSeedToFloat> {
-  typedef RScalarREG<typename UnaryReturn<T, FnSeedToFloat>::Type_t>  Type_t;
-};
-
-//! dest [float type] = source [seed type]
-template<class T1>
-inline typename UnaryReturn<RScalarREG<T1>, FnSeedToFloat>::Type_t
-seedToFloat(const RScalarREG<T1>& s1)
-{
-  return seedToFloat(s1.elem());
-}
 
 //! dest [some type] = source [some type]
 /*! Portable (internal) way of returning a single site */
@@ -1599,14 +1533,6 @@ peekSpin(const RScalarREG<T>& l, int row, int col)
 }
 
 
-//------------------------------------------
-//! dest = (mask) ? s1 : dest
-template<class T, class T1> 
-inline
-void copymask(RScalarREG<T>& d, const RScalarREG<T1>& mask, const RScalarREG<T>& s1) 
-{
-  copymask(d.elem(),mask.elem(),s1.elem());
-}
 
 //! dest [float type] = source [int type]
 template<class T, class T1>
@@ -1734,6 +1660,13 @@ inline typename BinaryReturn<RScalarREG<T1>, RScalarREG<T2>, FnLocalInnerProduct
 localInnerProduct(const RScalarREG<T1>& s1, const RScalarREG<T2>& s2)
 {
   return localInnerProduct(s1.elem(), s2.elem());
+}
+
+template<class T1, class T2>
+inline typename BinaryReturn<RScalarREG<T1>, RScalarREG<T2>, FnLocalColorInnerProduct>::Type_t
+localColorInnerProduct(const RScalarREG<T1>& s1, const RScalarREG<T2>& s2)
+{
+  return localColorInnerProduct(s1.elem(), s2.elem());
 }
 
 
@@ -2028,14 +1961,6 @@ adjMultiply(const RComplexREG<T1>& l, const RComplexREG<T2>& r)
 {
   typedef typename BinaryReturn<RComplexREG<T1>, RComplexREG<T2>, OpAdjMultiply>::Type_t  Ret_t;
 
-  // The complex conjugate nature has been eaten here leaving simple multiples
-  // involving transposes - which are probably null
-  
-//  d.real() = transpose(l.real())*r.real() + transpose(l.imag())*r.imag();
-//  d.imag() = transpose(l.real())*r.imag() - transpose(l.imag())*r.real();
-//  return d;
-
-  /*! NOTE: removed transpose here !!!!!  */
   return Ret_t(l.real()*r.real() + l.imag()*r.imag(),
 	       l.real()*r.imag() - l.imag()*r.real());
 }
@@ -2059,13 +1984,6 @@ adjMultiplyAdj(const RComplexREG<T1>& l, const RComplexREG<T2>& r)
 {
   typedef typename BinaryReturn<RComplexREG<T1>, RComplexREG<T2>, OpAdjMultiplyAdj>::Type_t  Ret_t;
 
-  // The complex conjugate nature has been eaten here leaving simple multiples
-  // involving transposes - which are probably null
-//  d.real() = transpose(l.real())*transpose(r.real()) - transpose(l.imag())*transpose(r.imag());
-//  d.imag() = -(transpose(l.real())*transpose(r.imag()) + transpose(l.imag())*transpose(r.real()));
-//  return d;
-
-  /*! NOTE: removed transpose here !!!!!  */
   return Ret_t(l.real()*r.real() - l.imag()*r.imag(),
 	       -(l.real()*r.imag() + l.imag()*r.real()));
 }
@@ -2122,12 +2040,6 @@ adj(const RComplexREG<T1>& l)
 {
   typedef typename UnaryReturn<RComplexREG<T1>, FnAdjoint>::Type_t  Ret_t;
 
-  // The complex conjugate nature has been eaten here leaving transpose
-//  d.real() = transpose(l.real());
-//  d.imag() = -transpose(l.imag());
-//  return d;
-
-  /*! NOTE: removed transpose here !!!!!  */
   return Ret_t(l.real(),
 	       -l.imag());
 }
@@ -2150,11 +2062,6 @@ transpose(const RComplexREG<T1>& l)
 {
   typedef typename UnaryReturn<RComplexREG<T1>, FnTranspose>::Type_t  Ret_t;
 
-//  d.real() = transpose(l.real());
-//  d.imag() = transpose(l.imag());
-//  return d;
-
-  /*! NOTE: removed transpose here !!!!!  */
   return Ret_t(l.real(), 
 	       l.imag());
 }
@@ -2376,15 +2283,6 @@ getSite(const RComplexREG<T>& s1, int innersite)
 }
 
 
-//! dest = (mask) ? s1 : dest
-template<class T, class T1> 
-inline
-void copymask(RComplexREG<T>& d, const RScalarREG<T1>& mask, const RComplexREG<T>& s1) 
-{
-  copymask(d.real(),mask.elem(),s1.real());
-  copymask(d.imag(),mask.elem(),s1.imag());
-}
-
 
 #if 1
 // Global sum over site indices only
@@ -2446,6 +2344,24 @@ localInnerProduct(const RComplexREG<T1>& l, const RComplexREG<T2>& r)
 	       localInnerProduct(l.real(),r.imag()) - localInnerProduct(l.imag(),r.real()));
 }
 
+
+
+template<class T1, class T2>
+struct BinaryReturn<RComplexREG<T1>, RComplexREG<T2>, FnLocalColorInnerProduct > {
+  typedef RComplexREG<typename BinaryReturn<T1, T2, FnLocalColorInnerProduct>::Type_t>  Type_t;
+};
+
+template<class T1, class T2>
+inline typename BinaryReturn<RComplexREG<T1>, RComplexREG<T2>, FnLocalColorInnerProduct>::Type_t
+localColorInnerProduct(const RComplexREG<T1>& l, const RComplexREG<T2>& r)
+{
+  typedef typename BinaryReturn<RComplexREG<T1>, RComplexREG<T2>, FnLocalColorInnerProduct>::Type_t  Ret_t;
+
+  return Ret_t(localColorInnerProduct(l.real(),r.real()) + localColorInnerProduct(l.imag(),r.imag()),
+	       localColorInnerProduct(l.real(),r.imag()) - localColorInnerProduct(l.imag(),r.real()));
+}
+
+  
 
 //! RScalarREG<T> = InnerProductReal(adj(RComplexREG<T1>)*RComplexREG<T1>)
 // Real-ness is eaten at this level
@@ -2597,29 +2513,23 @@ fill_gaussian(RComplexREG<T>& d, RComplexREG<T>& r1, RComplexREG<T>& r2)
 
   d.real() = w_r1_r * w_g_r;
   d.imag() = w_r1_r * w_g_i;
-
-#if 0
-  typedef typename InternalScalar<T>::Type_t  S;
-
-  // r1 and r2 are the input random numbers needed
-
-  /* Stage 2: get the cos of the second number  */
-  T  g_r, g_i;
-
-  r2.real() *= S(6.283185307);
-  g_r = cos(r2.real());
-  g_i = sin(r2.real());
-    
-  /* Stage 4: get  sqrt(-2.0 * log(u1)) */
-  r1.real() = sqrt(-S(2.0) * log(r1.real()));
-
-  /* Stage 5:   g_r = sqrt(-2*log(u1))*cos(2*pi*u2) */
-  /* Stage 5:   g_i = sqrt(-2*log(u1))*sin(2*pi*u2) */
-  d.real() = r1.real() * g_r;
-  d.imag() = r1.real() * g_i;
-#endif
 }
 
+
+
+
+template<class T1>
+struct UnaryReturn<RComplexREG<T1>, FnIsFinite> {
+  typedef RScalarREG<typename UnaryReturn<T1, FnIsFinite>::Type_t>  Type_t;
+};
+
+
+template<class T1>
+inline typename UnaryReturn<RComplexREG<T1>, FnIsFinite>::Type_t
+isfinite(const RComplexREG<T1>& s1)
+{
+  return isfinite(s1.real()) && isfinite(s1.imag());
+}
 
 
 template<class T>
@@ -2648,20 +2558,25 @@ qdpPHI(RComplexREG<T>& d,
 }
 
 
-
-template<class T1>
-struct UnaryReturn<RComplexREG<T1>, FnIsFinite> {
-  typedef RScalarREG<typename UnaryReturn<T1, FnIsFinite>::Type_t>  Type_t;
-};
-
-
-template<class T1>
-inline typename UnaryReturn<RComplexREG<T1>, FnIsFinite>::Type_t
-isfinite(const RComplexREG<T1>& s1)
+template<class T>
+inline void 
+qdpPHI4(RComplexREG<T>& d, 
+       const RComplexREG<T>& phi0, llvm::BasicBlock* bb0 ,
+       const RComplexREG<T>& phi1, llvm::BasicBlock* bb1 ,
+       const RComplexREG<T>& phi2, llvm::BasicBlock* bb2 ,
+       const RComplexREG<T>& phi3, llvm::BasicBlock* bb3 )
 {
-  return isfinite(s1.real()) && isfinite(s1.imag());
+  qdpPHI4(d.real(),
+	  phi0.real(),bb0,
+	  phi1.real(),bb1,
+	  phi2.real(),bb2,
+	  phi3.real(),bb3);
+  qdpPHI4(d.imag(),
+	  phi0.imag(),bb0,
+	  phi1.imag(),bb1,
+	  phi2.imag(),bb2,
+	  phi3.imag(),bb3);
 }
-
 
 
 

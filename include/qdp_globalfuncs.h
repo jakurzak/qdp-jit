@@ -43,6 +43,15 @@ namespace QDP
   }
 
 
+  template<class T, class C>
+  inline typename UnaryReturn<C, FnSumMulti>::Type_t
+  sumMulti(const QDPType<T,C>& s1, const Set& s)
+  {
+    return sumMulti(PETE_identity(s1),s);
+  }
+
+  
+
   //! OScalar = norm2(trace(adj(source)*source))
   /*!
    * return  num(trace(adj(source)*source))
@@ -78,6 +87,7 @@ namespace QDP
   {
     return sum(localNorm2(s1),s);
   }
+
 
   template<class T, class C>
   inline typename UnaryReturn<C, FnNorm2>::Type_t
@@ -234,24 +244,6 @@ namespace QDP
     return sum(localInnerProductReal(s1,s2),s);
   }
 
-
-  //-----------------------------------------------------------------------------
-  // Multiple global sums 
-  //! dest  = sumMulti(source1,Set) 
-  /*!
-   * Compute the global sum on multiple subsets specified by Set 
-   *
-   * This is a very simple implementation. There is no need for
-   * anything fancier unless global sums are just so extraordinarily
-   * slow. Otherwise, generalized sums happen so infrequently the slow
-   * version is fine.
-   */
-  template<class T, class C>
-  inline typename UnaryReturn<C, FnSumMulti>::Type_t
-  sumMulti(const QDPType<T,C>& s1, const Set& ss)
-  {
-    return sumMulti(PETE_identity(s1), ss);
-  }
 
 
   //-----------------------------------------------

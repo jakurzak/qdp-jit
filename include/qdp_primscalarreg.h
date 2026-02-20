@@ -21,14 +21,21 @@ namespace QDP {
 
 //! Primitive Scalar
 /*! Placeholder for no primitive structure */
-  template<class T> class PScalarREG //: public BaseREG<T,1,PScalarREG<T> >
+  template<class T> class PScalarREG
   {
     T F;
   public:
+    typedef T Sub_t;
 
     void setup(const PScalarJIT< typename JITType<T>::Type_t >& rhs ) {
       F.setup( rhs.elem() );
     }
+
+    void setup_value(const PScalarJIT< typename JITType<T>::Type_t >& rhs ) {
+      F.setup_value( rhs.elem() );
+    }
+
+    PScalarREG(const typename WordType<T>::Type_t& rhs): F(rhs) {}
 
 
     // Default constructing should be possible
@@ -136,13 +143,17 @@ namespace QDP {
 
     inline       T& elem()       { return F; }
     inline const T& elem() const { return F; }
-
-    // inline       T& elem()       { return this->arrayF(0); }
-    // inline const T& elem() const { return this->arrayF(0); }
   };
 
 
 
+template<class T>
+struct IsWordVec< PScalarREG<T> >
+{
+  constexpr static bool value = IsWordVec<T>::value;
+};
+
+  
 
 template<class T> 
 struct JITType< PScalarREG<T> >
@@ -885,6 +896,7 @@ sqrt(const PScalarREG<T1>& s1)
   return sqrt(s1.elem());
 }
 
+
 template<class T1>
 inline typename UnaryReturn<PScalarREG<T1>, FnIsFinite>::Type_t
 isfinite(const PScalarREG<T1>& s1)
@@ -993,6 +1005,26 @@ peekColor(const PScalarREG<T>& l, llvm::Value * row, llvm::Value * col)
   return peekColor(l.elem(),row,col);
 }
 
+
+template<class T>
+inline typename UnaryReturn<PScalarREG<T>, FnPeekColorVectorREG>::Type_t
+peekColorScalar(const PScalarREG<T>& l, llvm::Value * row)
+{
+  return peekColorScalar(l.elem(),row);
+}
+
+//! Extract color matrix components 
+/*! Generically, this is an identity operation. Defined differently under color */
+template<class T>
+inline typename UnaryReturn<PScalarREG<T>, FnPeekColorMatrixREG>::Type_t
+peekColorScalar(const PScalarREG<T>& l, llvm::Value * row, llvm::Value * col)
+{
+  return peekColorScalar(l.elem(),row,col);
+}
+
+
+
+
 //! Extract spin vector components 
 /*! Generically, this is an identity operation. Defined differently under spin */
 template<class T>
@@ -1054,22 +1086,6 @@ pokeSpin(PScalarREG<T1>& l, const PScalarREG<T2>& r, llvm::Value * row, llvm::Va
 }
 
 
-//-----------------------------------------------------------------------------
-//! PScalarREG = Gamma<N,m> * PScalarREG
-template<class T2, int N, int m>
-inline typename BinaryReturn<GammaConst<N,m>, PScalarREG<T2>, OpGammaConstMultiply>::Type_t
-operator*(const GammaConst<N,m>& l, const PScalarREG<T2>& r)
-{
-  return l * r.elem();
-}
-
-//! PScalarREG = PScalarREG * Gamma<N,m>
-template<class T2, int N, int m>
-inline typename BinaryReturn<PScalarREG<T2>, GammaConst<N,m>, OpGammaConstMultiply>::Type_t
-operator*(const PScalarREG<T2>& l, const GammaConst<N,m>& r)
-{
-  return l.elem() * r;
-}
 
 //-----------------------------------------------------------------------------
 //! PScalarREG = SpinProject(PScalarREG)
@@ -1324,14 +1340,6 @@ colorCrossProduct(const PScalarREG<T1>& s1, const PScalarREG<T2>& s2)
 
 
 
-//-----------------------------------------------------------------------------
-//! dest = (mask) ? s1 : dest
-template<class T, class T1> 
-inline void 
-copymask(PScalarREG<T>& d, const PScalarREG<T1>& mask, const PScalarREG<T>& s1) 
-{
-  copymask(d.elem(),mask.elem(),s1.elem());
-}
 
 //! dest  = random  
 template<class T, class T1, class T2,class T3>
@@ -1440,6 +1448,20 @@ localInnerProduct(const PScalarREG<T1>& s1, const PScalarREG<T2>& s2)
   return localInnerProduct(s1.elem(), s2.elem());
 }
 
+
+template<class T1, class T2>
+struct BinaryReturn<PScalarREG<T1>, PScalarREG<T2>, FnLocalColorInnerProduct > {
+  typedef PScalarREG<typename BinaryReturn<T1, T2, FnLocalColorInnerProduct>::Type_t>  Type_t;
+};
+
+template<class T1, class T2>
+inline typename BinaryReturn<PScalarREG<T1>, PScalarREG<T2>, FnLocalColorInnerProduct>::Type_t
+localColorInnerProduct(const PScalarREG<T1>& s1, const PScalarREG<T2>& s2)
+{
+  return localColorInnerProduct(s1.elem(), s2.elem());
+}
+
+  
 
 //! PScalarREG<T> = InnerProductReal(adj(PMatrix<T1>)*PMatrix<T1>)
 template<class T1, class T2>

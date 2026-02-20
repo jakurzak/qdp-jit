@@ -107,11 +107,27 @@ private:
 };
 
 
+  template<class T>
+  struct FirstWord< PSeed<T> >
+  {
+    static typename WordType<T>::Type_t get(const PSeed<T>& a)
+    {
+      return FirstWord<T>::get(a.elem(0));
+    }
+  };
+
 
 template<class T> 
 struct JITType<PSeed<T> >
 {
   typedef PSeedJIT<typename JITType<T>::Type_t>  Type_t;
+};
+
+
+template<class T> 
+struct REGType<PSeed<T> >
+{
+  typedef PSeedREG<typename REGType<T>::Type_t>  Type_t;
 };
 
 
@@ -229,6 +245,14 @@ struct WordType<PSeed<T1> >
   typedef typename WordType<T1>::Type_t  Type_t;
 };
 
+
+template<class T1>
+struct ScalarType<PSeed<T1> >
+{
+  typedef PSeed< typename ScalarType<T1>::Type_t > Type_t;
+};
+
+  
 // Fixed Precision versions (do these even make sense? )
 
 template<class T1>
@@ -547,14 +571,6 @@ zero_rep(PSeed<T>& dest)
 }
 
 
-//! dest = (mask) ? s1 : dest
-template<class T, class T1> 
-inline void 
-copymask(PSeed<T>& d, const PScalar<T1>& mask, const PSeed<T>& s1) 
-{
-  for(int i=0; i < 4; ++i)
-    copymask(d.elem(i),mask.elem(),s1.elem(i));
-}
 
 /*! @} */
 

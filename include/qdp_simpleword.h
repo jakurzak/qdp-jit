@@ -73,32 +73,14 @@ void zero_rep(double& dest)
   dest = 0;
 }
 
-//! No bool(dest) = 0
-
-
-//! d = (mask) ? s1 : d;
+#ifdef QDP_DEEP_LOG
 inline
-void copymask(int& d, bool mask, int s1) 
+void zero_rep(bool& dest) 
 {
-  if (mask)
-    d = s1;
+  dest = false;
 }
+#endif
 
-//! d = (mask) ? s1 : d;
-inline
-void copymask(float& d, bool mask, float s1) 
-{
-  if (mask)
-    d = s1;
-}
-
-//! d = (mask) ? s1 : d;
-inline
-void copymask(double& d, bool mask, double s1) 
-{
-  if (mask)
-    d = s1;
-}
 
 
 //---------------------------
@@ -375,6 +357,13 @@ int localInnerProduct(int s1, int s2)
 }
 
 inline
+int localColorInnerProduct(int s1, int s2)
+{
+  return s1*s2;
+}
+
+  
+inline
 unsigned int sum(unsigned int s1)
 {
   return s1;
@@ -392,6 +381,13 @@ unsigned int localInnerProduct(unsigned int s1, unsigned int s2)
   return s1*s2;
 }
 
+inline
+unsigned int localColorInnerProduct(unsigned int s1, unsigned int s2)
+{
+  return s1*s2;
+}
+
+  
 inline
 double sum(float s1)
 {
@@ -411,6 +407,13 @@ double localInnerProduct(float s1, float s2)
 }
 
 inline
+double localColorInnerProduct(float s1, float s2)
+{
+  return double(s1*s2);
+}
+
+  
+inline
 double sum(double s1)
 {
   return s1;
@@ -428,6 +431,11 @@ double localInnerProduct(double s1, double s2)
   return s1*s2;
 }
 
+inline
+double localColorInnerProduct(double s1, double s2)
+{
+  return s1*s2;
+}
 
 
 /*! @} */  // end of group simpleword
@@ -483,8 +491,19 @@ struct BinaryReturn<int, int, FnLocalInnerProduct> {
 };
 
 template<>
+struct BinaryReturn<int, int, FnLocalColorInnerProduct> {
+  typedef int  Type_t;
+};
+
+template<>
 struct TrinaryReturn<bool, int, int, FnWhere> {
   typedef int  Type_t;
+};
+
+
+template<>
+struct UnaryReturn<jit_half_t, FnSum> {
+  typedef DOUBLE_TYPE  Type_t;
 };
 
 
@@ -509,6 +528,11 @@ struct UnaryReturn<float, FnSumMulti> {
 };
 
 template<>
+struct UnaryReturn<jit_half_t, FnNorm2> {
+  typedef DOUBLE_TYPE  Type_t;
+};
+
+template<>
 struct UnaryReturn<float, FnNorm2> {
   typedef DOUBLE_TYPE  Type_t;
 };
@@ -524,7 +548,18 @@ struct UnaryReturn<float, FnLocalNorm2> {
 };
 
 template<>
+struct BinaryReturn<double, float, FnPow> {
+  typedef DOUBLE_TYPE  Type_t;
+};
+
+
+template<>
 struct BinaryReturn<float, float, FnLocalInnerProduct> {
+  typedef DOUBLE_TYPE  Type_t;
+};
+
+template<>
+struct BinaryReturn<float, float, FnLocalColorInnerProduct> {
   typedef DOUBLE_TYPE  Type_t;
 };
 

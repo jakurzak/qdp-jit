@@ -28,11 +28,12 @@ namespace QDP {
  * portion is a part of the generic class, hence it is called a domain
  * and not a category
  */
-  template <class T, int N, template<class,int> class C> class PMatrixREG //: public BaseREG<T,N*N,PMatrixREG<T,N,C> >
+  template <class T, int N, template<class,int> class C> class PMatrixREG 
 {
   T F[N*N];
 public:
   typedef C<T,N>  CC;
+  typedef T  Sub_t;
 
 
   //! PMatrixREG = PScalarREG
@@ -64,16 +65,6 @@ public:
       return static_cast<CC&>(*this);
     }
 
-#if 0
-  PMatrixREG& assign(const PMatrixREG& rhs) 
-    {
-      for(int i=0; i < N; ++i)
-	for(int j=0; j < N; ++j)
-	  elem(i,j) = rhs.elem(i,j);
-
-      return static_cast<PMatrixREG&>(*this);
-    }
-#endif
 
   //! PMatrixREG += PMatrixREG
   template<class T1>
@@ -150,32 +141,23 @@ public:
 public:
   T getRegElem(int row,int col) const {
     assert(!"ni");
-#if 0
-    int r_matidx = this->func().getRegs( Jit::s32 , 1 );
-    int r_N = this->func().getRegs( Jit::s32 , 1 );
-    this->func().asm_mov_literal( r_N , (int)N );
-    this->func().asm_mul( r_matidx , col , r_N );
-    this->func().asm_add( r_matidx , r_matidx , row );
-    return JV<T,N*N>::getRegElem( r_matidx );
-#endif
   }
-
-
-
 
         T& elem(int i, int j)       {return F[j+N*i];}
   const T& elem(int i, int j) const {return F[j+N*i];}
 
-  //       T& elem(int i, int j)       {return this->arrayF(j+N*i);}
-  // const T& elem(int i, int j) const {return this->arrayF(j+N*i);}
-
-
-  // T& elem(int i, int j) {return JV<T,N*N>::getF()[j+N*i];}
-  // const T& elem(int i, int j) const {return JV<T,N*N>::getF()[j+N*i];}
 
 };
 
 
+
+  template <class T, int N, template<class,int> class C >
+  struct IsWordVec< PMatrixREG<T,N,C > >
+  {
+    constexpr static bool value = IsWordVec<T>::value;
+  };
+
+  
 
   template <class T, int N, template<class,int> class PColorMatrixREG >
   struct JITType< PMatrixREG<T,N, PColorMatrixREG > >
@@ -1238,6 +1220,27 @@ cmplx(const PMatrixREG<T1,N,C>& s1, const PMatrixREG<T2,N,C>& s2)
 
 
 
+  //! isfinite
+template<class T1, int N, template<class,int> class C>
+struct UnaryReturn<PMatrixREG<T1,N,C>, FnIsFinite> {
+  typedef PScalarREG< typename UnaryReturn<T1, FnIsFinite >::Type_t > Type_t;
+};
+
+template<class T1, int N, template<class,int> class C>
+inline typename UnaryReturn<PMatrixREG<T1,N,C>, FnIsFinite>::Type_t
+isfinite(const PMatrixREG<T1,N,C>& l)
+{
+  typename UnaryReturn<PMatrixREG<T1,N,C>, FnIsFinite>::Type_t d(true);
+
+  for(int i=0; i < N; ++i)
+    for(int j=0; j < N; ++j)
+      d.elem() &= isfinite(l.elem(i,j));
+
+  return d;
+}
+
+
+
 // Functions
 //! PMatrixREG = i * PMatrixREG
 template<class T, int N, template<class,int> class C>
@@ -1452,15 +1455,6 @@ zero_rep(PMatrixREG<T,N,C>& dest)
 }
 
 
-//! dest = (mask) ? s1 : dest
-template<class T, class T1, int N, template<class,int> class C> 
-inline void 
-copymask(PMatrixREG<T,N,C>& d, const PScalarREG<T1>& mask, const PMatrixREG<T,N,C>& s1) 
-{
-  for(int i=0; i < N; ++i)
-    for(int j=0; j < N; ++j)
-      copymask(d.elem(i,j),mask.elem(),s1.elem(i,j));
-}
 
 
 //! dest [some type] = source [some type]
@@ -1526,26 +1520,6 @@ fill_gaussian(PMatrixREG<T,N,C>& d, PMatrixREG<T,N,C>& r1, PMatrixREG<T,N,C>& r2
 
 
 
-#if 0
-// Global sum over site indices only
-template<class T, int N, template<class,int> class C>
-struct UnaryReturn<PMatrixREG<T,N,C>, FnSum> {
-  typedef C<typename UnaryReturn<T, FnSum>::Type_t, N>  Type_t;
-};
-
-template<class T, int N, template<class,int> class C>
-inline typename UnaryReturn<PMatrixREG<T,N,C>, FnSum>::Type_t
-sum(const PMatrixREG<T,N,C>& s1)
-{
-  typename UnaryReturn<PMatrixREG<T,N,C>, FnSum>::Type_t  d;
-
-  for(int i=0; i < N; ++i)
-    for(int j=0; j < N; ++j)
-      d.elem(i,j) = sum(s1.elem(i,j));
-
-  return d;
-}
-#endif
 
 
 // InnerProduct (norm-seq) global sum = sum(tr(adj(s1)*s1))
@@ -1691,7 +1665,7 @@ localInnerProductReal(const PMatrixREG<T1,N,C>& s1, const PScalarREG<T2>& s2)
 
   d.elem() = localInnerProductReal(s1.elem(0,0), s2.elem());
   for(int k=1; k < N; ++k)
-    d.elem() += localInnerProductReal(s1.elem(k,0), s2.elem(k,k));
+    d.elem() += localInnerProductReal(s1.elem(k,0), s2.elem());
 
   return d;
 }
@@ -1753,6 +1727,26 @@ qdpPHI(PMatrixREG<T,N,C>& d,
 	     phi0.elem(i,j),bb0,
 	     phi1.elem(i,j),bb1);
 }
+
+
+template<class T, int N, template<class,int> class C>
+inline void 
+qdpPHI4(PMatrixREG<T,N,C>& d, 
+       const PMatrixREG<T,N,C>& phi0, llvm::BasicBlock* bb0 ,
+       const PMatrixREG<T,N,C>& phi1, llvm::BasicBlock* bb1 ,
+       const PMatrixREG<T,N,C>& phi2, llvm::BasicBlock* bb2 ,
+       const PMatrixREG<T,N,C>& phi3, llvm::BasicBlock* bb3 )
+{
+  for(int i=0; i < N; ++i)
+    for(int j=0; j < N; ++j)
+      qdpPHI4(d.elem(i,j),
+	      phi0.elem(i,j),bb0,
+	      phi1.elem(i,j),bb1,
+	      phi2.elem(i,j),bb2,
+	      phi3.elem(i,j),bb3 );
+}
+
+
 
 
 
