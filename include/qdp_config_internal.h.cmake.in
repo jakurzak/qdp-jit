@@ -94,6 +94,27 @@
 /* Enable GPU/JIT */
 #cmakedefine QDP_IS_QDPJIT			@QDP_IS_QDPJIT@
 
+/* Compile for LLVM 14.0 series */	
+#cmakedefine QDP_LLVM14				@QDP_LLVM14@
+
+/* Compile for LLVM 15.0 series */	
+#cmakedefine QDP_LLVM15				@QDP_LLVM15@
+
+/* Compile for LLVM 16.0 series */	
+#cmakedefine QDP_LLVM16				@QDP_LLVM16@
+
+/* Compile for LLVM 17.0 series */	
+#cmakedefine QDP_LLVM17				@QDP_LLVM17@
+
+/* Compile for LLVM 18.0 series */	
+#cmakedefine QDP_LLVM18				@QDP_LLVM18@
+
+/* Compile for LLVM 19.0 series */
+#cmakedefine QDP_LLVM19             @QDP_LLVM19@
+
+/* Compile for LLVM 20 series */
+#cmakedefine QDP_LLVM20				@QDP_LLVM20@
+
 /* Codegen uses vector instructions */	
 #cmakedefine QDP_CODEGEN_VECTOR			@QDP_CODEGEN_VECTOR@
 
