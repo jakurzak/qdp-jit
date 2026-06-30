@@ -96,12 +96,65 @@ target_include_directories( jit PUBLIC
         $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/../include>
         $<BUILD_INTERFACE:${CMAKE_CURRENT_BINARY_DIR}/../include>
         $<INSTALL_INTERFACE:include> )
+
+
 target_include_directories(jit PUBLIC ${LLVM_INCLUDE_DIRS} )
-if( "LLVM" IN_LIST LLVM_AVAILABLE_LIBS )
-	target_link_libraries( jit PUBLIC LLVM )
-else()
-	target_link_libraries( jit PUBLIC ${LLVM_AVAILABLE_LIBS} )
+
+
+set(QDPJIT_LLVM_COMPONENTS
+  Core
+  Support
+  Analysis
+  TransformUtils
+  ScalarOpts
+  InstCombine
+  Vectorize
+  ipo
+  Passes
+  IRReader
+  BitReader
+  BitWriter
+  AsmParser
+  AsmPrinter
+  Target
+  CodeGen
+  MC
+  MCParser
+  BinaryFormat
+  Object
+  ExecutionEngine
+  RuntimeDyld
+  JITLink
+  OrcJIT
+  OrcShared
+  OrcTargetProcess
+  X86CodeGen
+  X86AsmParser
+  X86Desc
+  X86Info
+  Linker
+  Demangle
+  MCJIT
+  TargetParser
+)
+
+if(QDP_ENABLE_BACKEND STREQUAL "CUDA")
+  list(APPEND QDPJIT_LLVM_COMPONENTS
+    NVPTXCodeGen
+    NVPTXDesc
+    NVPTXInfo
+  )
 endif()
+
+
+
+
+llvm_map_components_to_libnames(QDPJIT_LLVM_LIBS
+  ${QDPJIT_LLVM_COMPONENTS}
+)
+
+target_link_libraries(jit PUBLIC ${QDPJIT_LLVM_LIBS})
+
 target_link_libraries( jit PUBLIC QMP::qmp)
 
 if( QDP_ENABLE_BACKEND STREQUAL "ROCM" )

@@ -115,6 +115,9 @@
 /* Compile for LLVM 20 series */
 #cmakedefine QDP_LLVM20				@QDP_LLVM20@
 
+/* Compile for LLVM 22 series */
+#cmakedefine QDP_LLVM22				@QDP_LLVM22@
+
 /* Codegen uses vector instructions */	
 #cmakedefine QDP_CODEGEN_VECTOR			@QDP_CODEGEN_VECTOR@
 

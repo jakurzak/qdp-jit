@@ -192,7 +192,7 @@ namespace {
     bool ret;
     std::vector<const char *> args(argv, argv + argc);
 
-#if defined (QDP_LLVM15) || defined (QDP_LLVM16) || defined (QDP_LLVM17) || defined (QDP_LLVM18) || defined (QDP_LLVM19) || defined (QDP_LLVM20)
+#if defined (QDP_LLVM15) || defined (QDP_LLVM16) || defined (QDP_LLVM17) || defined (QDP_LLVM18) || defined (QDP_LLVM19) || defined (QDP_LLVM20) || defined (QDP_LLVM22)
     ret = lld::elf::link(args, stdoutOS, stderrOS, exitEarly, false);
 #else
     ret = lld::elf::link(args, exitEarly, stdoutOS, stderrOS);
@@ -863,7 +863,11 @@ namespace QDP
     llvm::TargetOptions options;
 
     TargetMachine.reset ( TheTarget->createTargetMachine(
+#if defined (QDP_LLVM22)
+							 TheTriple,
+#else
 							 TheTriple.str(),
+#endif
 							 str_arch,
 							 "",
 							 options,
@@ -1234,6 +1238,8 @@ namespace QDP
     
 #if defined QDP_BACKEND_ROCM
     mainFunc->setCallingConv( llvm::CallingConv::AMDGPU_KERNEL );
+#elif defined QDP_BACKEND_CUDA
+    mainFunc->setCallingConv( llvm::CallingConv::PTX_Kernel );
 #elif defined QDP_BACKEND_L0
     mainFunc->setCallingConv( llvm::CallingConv::SPIR_KERNEL );
 #else
@@ -1251,7 +1257,7 @@ namespace QDP
     it_stack = builder->GetInsertPoint(); // probly bb_stack.begin()
     
     bb_afterstack = llvm::BasicBlock::Create(*TheContext, "afterstack" );
-#if (defined (QDP_LLVM16) && !defined (QDP_ROCM553FIX) ) || defined (QDP_LLVM17) || defined (QDP_LLVM18) || defined (QDP_LLVM19) || defined (QDP_LLVM20)
+#if (defined (QDP_LLVM16) && !defined (QDP_ROCM553FIX) ) || defined (QDP_LLVM17) || defined (QDP_LLVM18) || defined (QDP_LLVM19) || defined (QDP_LLVM20) || defined (QDP_LLVM22)
     mainFunc->insert(mainFunc->end(), bb_afterstack);
 #else
     mainFunc->getBasicBlockList().push_back(bb_afterstack);
@@ -1745,7 +1751,7 @@ namespace QDP
     // return llvm_cast( llvm_type<bool>::value , u8 );
   }
   template<> ParamRef llvm_add_param<bool*>() { 
-#if defined (QDP_LLVM18) || defined (QDP_LLVM19) || defined (QDP_LLVM20)
+#if defined (QDP_LLVM18) || defined (QDP_LLVM19) || defined (QDP_LLVM20) || defined (QDP_LLVM22)
     vecParamType.push_back( llvm::PointerType::get( *TheContext,qdp_jit_config_get_global_addrspace()) ); 
 #else
     vecParamType.push_back( llvm::Type::getInt8PtrTy(*TheContext,qdp_jit_config_get_global_addrspace()) );
@@ -1761,7 +1767,7 @@ namespace QDP
     return vecParamType.size()-1;
   }
   template<> ParamRef llvm_add_param<int*>() { 
-#if defined (QDP_LLVM18) || defined (QDP_LLVM19) || defined (QDP_LLVM20)
+#if defined (QDP_LLVM18) || defined (QDP_LLVM19) || defined (QDP_LLVM20) || defined (QDP_LLVM22)
     vecParamType.push_back( llvm::PointerType::get( *TheContext,qdp_jit_config_get_global_addrspace()) ); 
 #else
     vecParamType.push_back( llvm::Type::getInt32PtrTy(*TheContext,qdp_jit_config_get_global_addrspace()) );
@@ -1777,7 +1783,7 @@ namespace QDP
     return vecParamType.size()-1;
   }
   template<> ParamRef llvm_add_param<jit_half_t*>() { 
-#if defined (QDP_LLVM18) || defined (QDP_LLVM19) || defined (QDP_LLVM20)
+#if defined (QDP_LLVM18) || defined (QDP_LLVM19) || defined (QDP_LLVM20) || defined (QDP_LLVM22)
     vecParamType.push_back( llvm::PointerType::get( *TheContext,qdp_jit_config_get_global_addrspace()) ); 
 #else
     vecParamType.push_back( llvm::Type::getHalfPtrTy(*TheContext,qdp_jit_config_get_global_addrspace()) );
@@ -1785,7 +1791,7 @@ namespace QDP
     return vecParamType.size()-1;
   }
   template<> ParamRef llvm_add_param<float*>() { 
-#if defined (QDP_LLVM18) || defined (QDP_LLVM19) || defined (QDP_LLVM20)
+#if defined (QDP_LLVM18) || defined (QDP_LLVM19) || defined (QDP_LLVM20) || defined (QDP_LLVM22)
     vecParamType.push_back( llvm::PointerType::get( *TheContext,qdp_jit_config_get_global_addrspace()) ); 
 #else
     vecParamType.push_back( llvm::Type::getFloatPtrTy(*TheContext,qdp_jit_config_get_global_addrspace()) );
@@ -1797,7 +1803,7 @@ namespace QDP
     return vecParamType.size()-1;
   }
   template<> ParamRef llvm_add_param<double*>() { 
-#if defined (QDP_LLVM18) || defined (QDP_LLVM19) || defined (QDP_LLVM20)
+#if defined (QDP_LLVM18) || defined (QDP_LLVM19) || defined (QDP_LLVM20) || defined (QDP_LLVM22)
     vecParamType.push_back( llvm::PointerType::get( *TheContext,qdp_jit_config_get_global_addrspace()) ); 
 #else
     vecParamType.push_back( llvm::Type::getDoublePtrTy(*TheContext,qdp_jit_config_get_global_addrspace()) );
@@ -1806,7 +1812,7 @@ namespace QDP
   }
 
   template<> ParamRef llvm_add_param<int**>() {
-#if defined (QDP_LLVM18) || defined (QDP_LLVM19) || defined (QDP_LLVM20)
+#if defined (QDP_LLVM18) || defined (QDP_LLVM19) || defined (QDP_LLVM20) || defined (QDP_LLVM22)
     vecParamType.push_back( llvm::PointerType::get( *TheContext,qdp_jit_config_get_global_addrspace()) ); 
 #else
     vecParamType.push_back( llvm::PointerType::get( llvm::Type::getInt32PtrTy(*TheContext , qdp_jit_config_get_global_addrspace() ) , qdp_jit_config_get_global_addrspace() ) );
@@ -1814,7 +1820,7 @@ namespace QDP
     return vecParamType.size()-1;
   }
   template<> ParamRef llvm_add_param<float**>() {
-#if defined (QDP_LLVM18) || defined (QDP_LLVM19) || defined (QDP_LLVM20)
+#if defined (QDP_LLVM18) || defined (QDP_LLVM19) || defined (QDP_LLVM20) || defined (QDP_LLVM22)
     vecParamType.push_back( llvm::PointerType::get( *TheContext,qdp_jit_config_get_global_addrspace()) ); 
 #else
     vecParamType.push_back( llvm::PointerType::get( llvm::Type::getFloatPtrTy(*TheContext , qdp_jit_config_get_global_addrspace() ) , qdp_jit_config_get_global_addrspace() ) );
@@ -1822,7 +1828,7 @@ namespace QDP
     return vecParamType.size()-1;
   }
   template<> ParamRef llvm_add_param<double**>() {
-#if defined (QDP_LLVM18) || defined (QDP_LLVM19) || defined (QDP_LLVM20)
+#if defined (QDP_LLVM18) || defined (QDP_LLVM19) || defined (QDP_LLVM20) || defined (QDP_LLVM22)
     vecParamType.push_back( llvm::PointerType::get( *TheContext,qdp_jit_config_get_global_addrspace()) ); 
 #else
     vecParamType.push_back( llvm::PointerType::get( llvm::Type::getDoublePtrTy(*TheContext , qdp_jit_config_get_global_addrspace() ) , qdp_jit_config_get_global_addrspace() ) );
@@ -1838,7 +1844,7 @@ namespace QDP
     std::ostringstream oss;
     oss << "L" << llvm_counters::label_counter++;
     llvm::BasicBlock *BB = llvm::BasicBlock::Create(*TheContext, oss.str() );
-#if (defined (QDP_LLVM16) && !defined (QDP_ROCM553FIX) ) || defined (QDP_LLVM17) || defined (QDP_LLVM18) || defined (QDP_LLVM19) || defined(QDP_LLVM20)
+#if (defined (QDP_LLVM16) && !defined (QDP_ROCM553FIX) ) || defined (QDP_LLVM17) || defined (QDP_LLVM18) || defined (QDP_LLVM19) || defined(QDP_LLVM20) || defined(QDP_LLVM22)
     mainFunc->insert(mainFunc->end(), BB);
 #else
     mainFunc->getBasicBlockList().push_back(BB);
@@ -1945,7 +1951,7 @@ namespace QDP
     llvm::FunctionType *FT = llvm::FunctionType::get( ret ,
     						      llvm::ArrayRef<llvm::Type*>( param_types.data() , param_types.size() ) , 
     						      false );
-#if (defined (QDP_LLVM14) && (!defined (QDP_ROCM5FIX))) || defined (QDP_LLVM15) || defined (QDP_LLVM16) || defined (QDP_LLVM17) || defined (QDP_LLVM18) || defined (QDP_LLVM19) || defined (QDP_LLVM20)
+#if (defined (QDP_LLVM14) && (!defined (QDP_ROCM5FIX))) || defined (QDP_LLVM15) || defined (QDP_LLVM16) || defined (QDP_LLVM17) || defined (QDP_LLVM18) || defined (QDP_LLVM19) || defined (QDP_LLVM20) || defined (QDP_LLVM22)
     llvm::AttrBuilder ABuilder(*TheContext);
 #else
     llvm::AttrBuilder ABuilder;
@@ -1989,7 +1995,7 @@ namespace QDP
   {
     llvm::FunctionType *IntrinFnTy = llvm::FunctionType::get(llvm::Type::getVoidTy(*TheContext), false);
 
-#if (defined (QDP_LLVM14) && (!defined (QDP_ROCM5FIX))) || defined (QDP_LLVM15) || defined (QDP_LLVM16) || defined (QDP_LLVM17) || defined (QDP_LLVM18) || defined (QDP_LLVM19) ||defined(QDP_LLVM20)
+#if (defined (QDP_LLVM14) && (!defined (QDP_ROCM5FIX))) || defined (QDP_LLVM15) || defined (QDP_LLVM16) || defined (QDP_LLVM17) || defined (QDP_LLVM18) || defined (QDP_LLVM19) || defined(QDP_LLVM20) || defined(QDP_LLVM22)
     llvm::AttrBuilder ABuilder(*TheContext);
 #else
     llvm::AttrBuilder ABuilder;
@@ -2105,7 +2111,7 @@ namespace QDP
     llvm::buffer_ostream bos(rss);
 
 
-#if defined (QDP_LLVM18) || defined (QDP_LLVM19) || defined (QDP_LLVM20)
+#if defined (QDP_LLVM18) || defined (QDP_LLVM19) || defined (QDP_LLVM20) || defined (QDP_LLVM22)
     if (TargetMachine->addPassesToEmitFile(PM, bos , nullptr ,  llvm::CodeGenFileType::AssemblyFile ))
 #else
     if (TargetMachine->addPassesToEmitFile(PM, bos , nullptr ,  llvm::CGFT_AssemblyFile ))
@@ -2261,7 +2267,7 @@ namespace QDP
     PB.registerLoopAnalyses(LAM);
     PB.crossRegisterProxies(LAM, FAM, CGAM, MAM);
 
-#if defined (QDP_LLVM17) || defined (QDP_LLVM18) || defined (QDP_LLVM19) || defined(QDP_LLVM20)
+#if defined (QDP_LLVM17) || defined (QDP_LLVM18) || defined (QDP_LLVM19) || defined(QDP_LLVM20) || defined(QDP_LLVM22)
     ModulePassManager MPM = PB.buildPerModuleDefaultPipeline(OptimizationLevel::O0);
 #else
     ModulePassManager MPM = PB.buildO0DefaultPipeline(OptimizationLevel::O0);
@@ -2546,7 +2552,7 @@ namespace QDP
 	  if (TargetMachine->addPassesToEmitFile(CodeGenPasses, 
 						 *isabin_fs,
 						 nullptr,
-#if defined (QDP_LLVM18) || defined (QDP_LLVM19) || defined (QDP_LLVM20)
+#if defined (QDP_LLVM18) || defined (QDP_LLVM19) || defined (QDP_LLVM20) || defined (QDP_LLVM22)
 						 llvm::CodeGenFileType::ObjectFile ))
 #else
 						 llvm::CodeGenFileType::CGFT_ObjectFile ))
