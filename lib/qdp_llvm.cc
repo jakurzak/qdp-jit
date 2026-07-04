@@ -2,6 +2,10 @@
 #include "qdp_config.h"
 #include "qdp_params.h"
 
+#include "llvm/ADT/SmallVector.h"
+#include "llvm/IR/Instructions.h"
+#include "llvm/IR/Module.h"
+#include "llvm/Support/raw_ostream.h"
 #include "llvm/ADT/ArrayRef.h"
 #include "llvm/ADT/Statistic.h"
 #include "llvm/ADT/StringSet.h"
@@ -246,8 +250,8 @@ namespace QDP
     //
 #ifdef QDP_BACKEND_ROCM
     std::vector<std::string> vec_str_libdevice_path = { ROCM_DIR };
-    std::vector<std::string> vec_str_libdevice_path_append = { "llvm/lib/libdevice/" , "llvm/lib/" };
-    std::vector<std::string> vec_str_libdevice_name = { "libm-amdgcn-ARCH.bc" , "libomptarget-400-amdgpu-ARCH.bc" , "libomptarget-amdgpu-ARCH.bc" , "libomptarget-amdgcn-ARCH.bc" , "libomptarget-new-amdgpu-ARCH.bc" , "libomptarget-old-amdgpu-ARCH.bc" };
+    std::vector<std::string> vec_str_libdevice_path_append = { "lib/llvm/lib/amdgcn-amd-amdhsa/" , "llvm/lib/libdevice/" , "llvm/lib/" };
+    std::vector<std::string> vec_str_libdevice_name = { "libomptarget-amdgpu.bc" , "libm-amdgcn-ARCH.bc" , "libomptarget-400-amdgpu-ARCH.bc" , "libomptarget-amdgpu-ARCH.bc" , "libomptarget-amdgcn-ARCH.bc" , "libomptarget-new-amdgpu-ARCH.bc" , "libomptarget-old-amdgpu-ARCH.bc" };
 #elif QDP_BACKEND_CUDA
     std::vector<std::string> vec_str_libdevice_path = { "CUDAPATH" , "/usr/local/cuda/" , "/usr/lib/nvidia-cuda-toolkit/" };
     std::vector<std::string> vec_str_libdevice_path_append = { "nvvm/libdevice/" , "libdevice/" , "cuda/nvvm/libdevice/" , "cuda/CUDAVERSION/nvvm/libdevice/"};
@@ -520,7 +524,9 @@ namespace QDP
     libs.push_back(std::string(ROCM_DIR) + "/amdgcn/bitcode/oclc_daz_opt_off.bc");
     libs.push_back(std::string(ROCM_DIR) + "/amdgcn/bitcode/oclc_correctly_rounded_sqrt_on.bc");
     libs.push_back(std::string(ROCM_DIR) + "/amdgcn/bitcode/oclc_abi_version_500.bc");
-    
+    //libs.push_back(std::string(ROCM_DIR) + "/amdgcn/bitcode/opencl.bc");
+    //libs.push_back(std::string(ROCM_DIR) + "/amdgcn/bitcode/ockl.bc");
+
     libs.insert( libs.end() , jit_config_get_extra_lib().begin() , jit_config_get_extra_lib().end() );
     
     module_ocml.clear();
@@ -741,7 +747,11 @@ namespace QDP
       }
     
     std::string Error;
+#if defined (QDP_LLVM22)
+    const llvm::Target *TheTarget = llvm::TargetRegistry::lookupTarget( "", TheTriple , Error );
+#else
     const llvm::Target *TheTarget = llvm::TargetRegistry::lookupTarget( TheTriple.str() , Error );
+#endif
     if (!TheTarget) {
       std::cout << Error;
       QDPIO::cerr << "Something went wrong setting the target\n";
@@ -755,7 +765,11 @@ namespace QDP
     std::string FeaturesStr;
     
     TargetMachine.reset(TheTarget->createTargetMachine(
-						       TheTriple.getTriple(), 
+#if defined (QDP_LLVM22)
+							 TheTriple,
+#else
+							 TheTriple.str(),
+#endif
 						       str_arch,
 						       FeaturesStr, 
 						       Options,
@@ -1591,7 +1605,11 @@ namespace QDP
 							  llvm::GlobalVariable::NotThreadLocal, //ThreadLocalMode=NotThreadLocal
 							  qdp_jit_config_get_local_addrspace(), // unsigned AddressSpace=0, 
 							  false); //bool isExternallyInitialized=false)
+#if defined (QDP_LLVM22)
+    return builder->CreatePointerCast(gv, llvm::PointerType::get( *TheContext , qdp_jit_config_get_local_addrspace() ) );
+#else
     return builder->CreatePointerCast(gv, llvm::PointerType::get( ty , qdp_jit_config_get_local_addrspace() ) );
+#endif
   }
 #else
   llvm::Value* llvm_get_shared_ptr( llvm::Type *ty , int n ) {
@@ -1606,8 +1624,11 @@ namespace QDP
 							  llvm::GlobalVariable::NotThreadLocal, //ThreadLocalMode=NotThreadLocal
 							  qdp_jit_config_get_local_addrspace(), // unsigned AddressSpace=0, 
 							  false); //bool isExternallyInitialized=false)
-
+#if defined (QDP_LLVM22)
+    return builder->CreatePointerCast(gv, llvm::PointerType::get( *TheContext , qdp_jit_config_get_local_addrspace() ) );
+#else
     return builder->CreatePointerCast(gv, llvm::PointerType::get( ty , qdp_jit_config_get_local_addrspace() ) );
+#endif
   }
 #endif
   
@@ -2345,6 +2366,191 @@ namespace QDP
   }
 #endif
 
+
+#if defined(QDP_LLVM22) && defined(QDP_BACKEND_ROCM)
+static void rewriteROCmLibmCallsToOCML(llvm::Module &M)
+{
+  llvm::LLVMContext &Ctx = M.getContext();
+
+  llvm::Type *F32 = llvm::Type::getFloatTy(Ctx);
+  llvm::Type *F64 = llvm::Type::getDoubleTy(Ctx);
+  llvm::Type *I32 = llvm::Type::getInt32Ty(Ctx);
+
+  struct MapEntry {
+    const char *LibmName;
+    const char *OCMLName;
+    llvm::Type *RetTy;
+    llvm::Type *ArgTy0;
+    llvm::Type *ArgTy1;   // nullptr for unary functions
+  };
+
+  const MapEntry Maps[] = {
+    // ------------------------------------------------------------
+    // float unary: float(float)
+    // ------------------------------------------------------------
+    {"sinf",    "__ocml_sin_f32",    F32, F32, nullptr},
+    {"acosf",   "__ocml_acos_f32",   F32, F32, nullptr},
+    {"asinf",   "__ocml_asin_f32",   F32, F32, nullptr},
+    {"atanf",   "__ocml_atan_f32",   F32, F32, nullptr},
+    {"ceilf",   "__ocml_ceil_f32",   F32, F32, nullptr},
+    {"floorf",  "__ocml_floor_f32",  F32, F32, nullptr},
+    {"cosf",    "__ocml_cos_f32",    F32, F32, nullptr},
+    {"coshf",   "__ocml_cosh_f32",   F32, F32, nullptr},
+    {"expf",    "__ocml_exp_f32",    F32, F32, nullptr},
+    {"logf",    "__ocml_log_f32",    F32, F32, nullptr},
+    {"log10f",  "__ocml_log10_f32",  F32, F32, nullptr},
+    {"sinhf",   "__ocml_sinh_f32",   F32, F32, nullptr},
+    {"tanf",    "__ocml_tan_f32",    F32, F32, nullptr},
+    {"tanhf",   "__ocml_tanh_f32",   F32, F32, nullptr},
+    {"fabsf",   "__ocml_fabs_f32",   F32, F32, nullptr},
+    {"sqrtf",   "__ocml_sqrt_f32",   F32, F32, nullptr},
+
+    // ------------------------------------------------------------
+    // float binary: float(float, float)
+    // ------------------------------------------------------------
+    {"powf",    "__ocml_pow_f32",    F32, F32, F32},
+    {"atan2f",  "__ocml_atan2_f32",  F32, F32, F32},
+
+    // ------------------------------------------------------------
+    // float finite predicates: int(float)
+    //
+    // qdp-jit historically used "__finitef" in some places, so keep
+    // several common spellings. Only the spelling actually present in
+    // the module will be rewritten.
+    // ------------------------------------------------------------
+    {"isfinitef", "__ocml_isfinite_f32", I32, F32, nullptr},
+    {"finitef",   "__ocml_isfinite_f32", I32, F32, nullptr},
+    {"__finitef", "__ocml_isfinite_f32", I32, F32, nullptr},
+
+    // ------------------------------------------------------------
+    // double unary: double(double)
+    // ------------------------------------------------------------
+    {"sin",     "__ocml_sin_f64",    F64, F64, nullptr},
+    {"acos",    "__ocml_acos_f64",   F64, F64, nullptr},
+    {"asin",    "__ocml_asin_f64",   F64, F64, nullptr},
+    {"atan",    "__ocml_atan_f64",   F64, F64, nullptr},
+    {"ceil",    "__ocml_ceil_f64",   F64, F64, nullptr},
+    {"floor",   "__ocml_floor_f64",  F64, F64, nullptr},
+    {"cos",     "__ocml_cos_f64",    F64, F64, nullptr},
+    {"cosh",    "__ocml_cosh_f64",   F64, F64, nullptr},
+    {"exp",     "__ocml_exp_f64",    F64, F64, nullptr},
+    {"log",     "__ocml_log_f64",    F64, F64, nullptr},
+    {"log10",   "__ocml_log10_f64",  F64, F64, nullptr},
+    {"sinh",    "__ocml_sinh_f64",   F64, F64, nullptr},
+    {"tan",     "__ocml_tan_f64",    F64, F64, nullptr},
+    {"tanh",    "__ocml_tanh_f64",   F64, F64, nullptr},
+    {"fabs",    "__ocml_fabs_f64",   F64, F64, nullptr},
+    {"sqrt",    "__ocml_sqrt_f64",   F64, F64, nullptr},
+
+    // ------------------------------------------------------------
+    // double binary: double(double, double)
+    // ------------------------------------------------------------
+    {"pow",     "__ocml_pow_f64",    F64, F64, F64},
+    {"atan2",   "__ocml_atan2_f64",  F64, F64, F64},
+
+    // ------------------------------------------------------------
+    // double finite predicates: int(double)
+    // ------------------------------------------------------------
+    {"isfinite", "__ocml_isfinite_f64", I32, F64, nullptr},
+    {"finite",   "__ocml_isfinite_f64", I32, F64, nullptr},
+    {"__finite", "__ocml_isfinite_f64", I32, F64, nullptr},
+  };
+
+  for (const MapEntry &Map : Maps)
+  {
+    llvm::Function *OldF = M.getFunction(Map.LibmName);
+    if (!OldF)
+      continue;
+
+    llvm::SmallVector<llvm::Type *, 2> ArgTys;
+    ArgTys.push_back(Map.ArgTy0);
+
+    if (Map.ArgTy1)
+      ArgTys.push_back(Map.ArgTy1);
+
+    llvm::FunctionType *NewFTy =
+        llvm::FunctionType::get(Map.RetTy, ArgTys, false);
+
+    llvm::FunctionCallee NewF =
+        M.getOrInsertFunction(Map.OCMLName, NewFTy);
+
+    llvm::SmallVector<llvm::CallBase *, 32> Calls;
+
+    for (llvm::User *U : OldF->users())
+    {
+      if (auto *CB = llvm::dyn_cast<llvm::CallBase>(U))
+      {
+        Calls.push_back(CB);
+      }
+      else
+      {
+        QDPIO::cerr << "ROCm OCML rewrite: non-call use of "
+                    << Map.LibmName << " remains\n";
+        QDP_abort(1);
+      }
+    }
+
+    for (llvm::CallBase *CB : Calls)
+    {
+      const unsigned ExpectedArgs = Map.ArgTy1 ? 2 : 1;
+
+      if (CB->arg_size() != ExpectedArgs)
+      {
+        QDPIO::cerr << "ROCm OCML rewrite: unexpected argument count for "
+                    << Map.LibmName << "\n";
+        QDP_abort(1);
+      }
+
+      if (CB->getType() != Map.RetTy)
+      {
+        QDPIO::cerr << "ROCm OCML rewrite: unexpected return type for "
+                    << Map.LibmName << "\n";
+        QDP_abort(1);
+      }
+
+      if (CB->getArgOperand(0)->getType() != Map.ArgTy0)
+      {
+        QDPIO::cerr << "ROCm OCML rewrite: unexpected first argument type for "
+                    << Map.LibmName << "\n";
+        QDP_abort(1);
+      }
+
+      if (Map.ArgTy1 && CB->getArgOperand(1)->getType() != Map.ArgTy1)
+      {
+        QDPIO::cerr << "ROCm OCML rewrite: unexpected second argument type for "
+                    << Map.LibmName << "\n";
+        QDP_abort(1);
+      }
+
+      llvm::IRBuilder<> B(CB);
+
+      llvm::SmallVector<llvm::Value *, 2> Args;
+      Args.push_back(CB->getArgOperand(0));
+
+      if (Map.ArgTy1)
+        Args.push_back(CB->getArgOperand(1));
+
+      llvm::CallInst *NewCall = B.CreateCall(NewF, Args);
+
+      NewCall->setCallingConv(llvm::CallingConv::C);
+      NewCall->setDebugLoc(CB->getDebugLoc());
+
+      // Only floating-point calls carry meaningful FMF.
+      if (auto *OldCall = llvm::dyn_cast<llvm::CallInst>(CB))
+        NewCall->copyFastMathFlags(OldCall);
+
+      CB->replaceAllUsesWith(NewCall);
+      CB->eraseFromParent();
+    }
+
+    if (OldF->use_empty())
+      OldF->eraseFromParent();
+  }
+}
+
+
+#endif
+
   
 #ifdef QDP_BACKEND_ROCM
   void build_function_rocm_codegen( JitFunction& func , const std::string& shared_path)
@@ -2369,7 +2575,15 @@ namespace QDP
 	llvm_init_libdevice();
 
 	llvm_init_ocml();
-    
+   
+#if defined(QDP_LLVM22)
+        if (jit_config_get_verbose_output())
+	      {
+		QDPIO::cout << "rewriting ROCm libm calls to OCML\n";
+	      }
+	rewriteROCmLibmCallsToOCML(*Mod);
+#endif
+
 	std::string ErrorMsg;
 	if (llvm::Linker::linkModules( *Mod , std::move( module_libdevice ) )) {  // llvm::Linker::PreserveSource
 	  QDPIO::cerr << "Linking libdevice failed: " << ErrorMsg.c_str() << "\n";
@@ -2542,8 +2756,6 @@ namespace QDP
     
 	llvm::legacy::PassManager CodeGenPasses;
     
-	llvm::LLVMTargetMachine &LLVMTM = static_cast<llvm::LLVMTargetMachine &>(*TargetMachine);
-
 	std::error_code ec;
 
 	{

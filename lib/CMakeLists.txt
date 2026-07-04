@@ -124,14 +124,6 @@ set(QDPJIT_LLVM_COMPONENTS
   Object
   ExecutionEngine
   RuntimeDyld
-  JITLink
-  OrcJIT
-  OrcShared
-  OrcTargetProcess
-  X86CodeGen
-  X86AsmParser
-  X86Desc
-  X86Info
   Linker
   Demangle
   MCJIT
@@ -146,18 +138,10 @@ if(QDP_ENABLE_BACKEND STREQUAL "CUDA")
   )
 endif()
 
-
-
-
-llvm_map_components_to_libnames(QDPJIT_LLVM_LIBS
-  ${QDPJIT_LLVM_COMPONENTS}
-)
-
-target_link_libraries(jit PUBLIC ${QDPJIT_LLVM_LIBS})
-
-target_link_libraries( jit PUBLIC QMP::qmp)
-
 if( QDP_ENABLE_BACKEND STREQUAL "ROCM" )
+  list(APPEND QDPJIT_LLVM_COMPONENTS 
+	AMDGPU
+	)
   target_include_directories(jit PUBLIC ${LLD_INCLUDE_DIRS} )
   target_link_libraries( jit PUBLIC ${LLD_EXPORTED_TARGETS} )
 endif()
@@ -168,6 +152,16 @@ if( QDP_ENABLE_BACKEND STREQUAL "L0" )
   target_link_libraries(jit PUBLIC ${PKG_LLVMSPIRV_LIBRARIES})
   target_include_directories(jit PUBLIC ${PKG_LLVMSPIRV_INCLUDE_DIRS})
 endif()
+
+
+llvm_map_components_to_libnames(QDPJIT_LLVM_LIBS
+  ${QDPJIT_LLVM_COMPONENTS}
+)
+
+target_link_libraries(jit PUBLIC ${QDPJIT_LLVM_LIBS})
+
+target_link_libraries( jit PUBLIC QMP::qmp)
+
 
 
 set_target_properties( jit PROPERTIES CXX_STANDARD 17 )
