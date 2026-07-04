@@ -23,10 +23,6 @@ option(QDP_ENABLE_PROFILING "Enable profiling" OFF)
 option(QDP_ENABLE_ROCM_STATS "Enable ROCM statistics" OFF)
 option(QDP_ENABLE_MANAGED_MEMORY "Enable CUDA/HIP/LevelZero Managed Memory" OFF)
 
-option(QDP_ROCM5FIX "Work around ROCM5.1.x issue" OFF)
-option(QDP_ROCM553FIX "Work around ROCM5.5.3 issue" OFF)
-option(QDP_ROCM_PRE "Use ROCM pre 5.2.x" OFF)
-
 set(QDP_USE_PROFILING ${QDP_ENABLE_PROFILING})
 
 option(QDP_ENABLE_CUSTOM_KERNELS "Enable Custom Kernels" OFF)
@@ -118,32 +114,6 @@ if( ${QDP_ENABLE_BACKEND} STREQUAL "CUDA")
   set(GPU_LIBS "CUDA::cuda_driver")
 endif()
 
-if( ${QDP_ENABLE_BACKEND} STREQUAL "ROCM")
-  message(STATUS "Building for ROCM")
-  set(QDP_BACKEND_ROCM "1")
-
-  if( NOT DEFINED ROCM_PATH )
-    if( NOT DEFINED ENV{ROCM_PATH})
-      set(ROCM_PATH "/opt/rocm")
-    else()
-      set(ROCM_PATH $ENV{ROCM_PATH})
-    endif()
-  endif()
-
-  #set(CMAKE_MODULE_PATH "${ROCM_PATH}/lib/cmake" ${CMAKE_MODULE_PATH})
-  find_package(LLD REQUIRED)
-  find_package(hip REQUIRED)
-
-  set(GPU_LIBS hip::amdhip64)
-  if( QDP_ENABLE_ROCM_STATS )
-    set(QDP_USE_ROCM_STATS "1")
-    find_package(amd_comgr REQUIRED)
-    set(GPU_LIBS ${GPU_LIBS};amd_comgr)
-  endif()
-  set(ROCM_DIR ${ROCM_PATH})
-  install(FILES libdevice/libomptarget-new-amdgpu-gfx90a-5.4.3.bc DESTINATION libdevice)
-  set(QDPJIT_INSTALL_DIR "${CMAKE_INSTALL_PREFIX}")
-endif()
  
 set(QDP_IS_QDPJIT "1")
 
@@ -289,28 +259,134 @@ message( STATUS "QDP++: Setting alignment size to ${QDP_ALIGNMENT_SIZE}")
 check_function_exists("gethostname" HAVE_GETHOSTNAME)
 check_function_exists("strnlen" HAVE_STRNLEN)
 
-find_package(LLVM CONFIG REQUIRED)
 
-if(QDP_ENABLE_LLVM22 AND NOT LLVM_VERSION_MAJOR EQUAL 22)
-  message(FATAL_ERROR "LLVM 22.x required but found ${LLVM_PACKAGE_VERSION}")
-elseif(QDP_ENABLE_LLVM20 AND NOT LLVM_VERSION_MAJOR EQUAL 20)
-  message(FATAL_ERROR "LLVM 20.x required but found ${LLVM_PACKAGE_VERSION}")
-elseif(QDP_ENABLE_LLVM19 AND NOT LLVM_VERSION_MAJOR EQUAL 19)
-  message(FATAL_ERROR "LLVM 19.x required but found ${LLVM_PACKAGE_VERSION}")
-elseif(QDP_ENABLE_LLVM18 AND NOT LLVM_VERSION_MAJOR EQUAL 18)
-  message(FATAL_ERROR "LLVM 18.x required but found ${LLVM_PACKAGE_VERSION}")
-elseif(QDP_ENABLE_LLVM17 AND NOT LLVM_VERSION_MAJOR EQUAL 17)
-  message(FATAL_ERROR "LLVM 17.x required but found ${LLVM_PACKAGE_VERSION}")
-elseif(QDP_ENABLE_LLVM16 AND NOT LLVM_VERSION_MAJOR EQUAL 16)
-  message(FATAL_ERROR "LLVM 16.x required but found ${LLVM_PACKAGE_VERSION}")
-elseif(QDP_ENABLE_LLVM15 AND NOT LLVM_VERSION_MAJOR EQUAL 15)
-  message(FATAL_ERROR "LLVM 15.x required but found ${LLVM_PACKAGE_VERSION}")
-elseif(QDP_ENABLE_LLVM14 AND NOT LLVM_VERSION_MAJOR EQUAL 14)
-  message(FATAL_ERROR "LLVM 14.x required but found ${LLVM_PACKAGE_VERSION}")
+if(QDP_ENABLE_BACKEND STREQUAL "ROCM")
+  message(STATUS "Building for ROCM")
+  set(QDP_BACKEND_ROCM "1")
+
+  if(NOT DEFINED ROCM_PATH)
+    if(DEFINED ENV{ROCM_PATH})
+      set(ROCM_PATH "$ENV{ROCM_PATH}" CACHE PATH "ROCm installation prefix")
+    else()
+      set(ROCM_PATH "/opt/rocm" CACHE PATH "ROCm installation prefix")
+    endif()
+  endif()
+
+  set(ROCM_DIR "${ROCM_PATH}")
+
+  if(NOT DEFINED LLVM_DIR)
+    set(LLVM_DIR "${ROCM_PATH}/lib/llvm/lib/cmake/llvm" CACHE PATH "LLVMConfig.cmake from ROCm LLVM")
+  endif()
+
+  if(NOT DEFINED hip_DIR)
+    set(hip_DIR "${ROCM_PATH}/lib/cmake/hip" CACHE PATH "HIP CMake package")
+  endif()
+
+  list(PREPEND CMAKE_PREFIX_PATH
+    "${ROCM_PATH}"
+    "${ROCM_PATH}/lib/llvm"
+  )
+
+  find_package(hip REQUIRED)
+
+find_program(QDP_ROCM_LD_LLD
+  NAMES ld.lld
+  PATHS
+    "${ROCM_PATH}/lib/llvm/bin"
+    "${ROCM_PATH}/llvm/bin"
+    "${ROCM_PATH}/bin"
+  NO_DEFAULT_PATH
+)
+
+if(NOT QDP_ROCM_LD_LLD)
+  message(FATAL_ERROR
+    "Could not find ROCm ld.lld under ${ROCM_PATH}. "
+    "Expected something like ${ROCM_PATH}/lib/llvm/bin/ld.lld")
 endif()
+
+message(STATUS "Using ROCm ld.lld: ${QDP_ROCM_LD_LLD}")
+
+
+  set(GPU_LIBS hip::amdhip64)
+
+  if(QDP_ENABLE_ROCM_STATS)
+    set(QDP_USE_ROCM_STATS "1")
+    find_package(amd_comgr REQUIRED)
+    set(GPU_LIBS ${GPU_LIBS} amd_comgr)
+  endif()
+
+  set(QDPJIT_INSTALL_DIR "${CMAKE_INSTALL_PREFIX}")
+endif()
+
+
+find_package(LLVM CONFIG REQUIRED)
 
 message(STATUS "Found LLVM ${LLVM_PACKAGE_VERSION}")
 message(STATUS "Using LLVMConfig.cmake in ${LLVM_DIR}")
+
+set(QDP_LLVM_VERSION_MAJOR ${LLVM_VERSION_MAJOR})
+set(QDP_LLVM_VERSION_MINOR ${LLVM_VERSION_MINOR})
+
+if(LLVM_VERSION_MAJOR EQUAL 14)
+  set(QDP_LLVM14 1)
+elseif(LLVM_VERSION_MAJOR EQUAL 15)
+  set(QDP_LLVM15 1)
+elseif(LLVM_VERSION_MAJOR EQUAL 16)
+  set(QDP_LLVM16 1)
+elseif(LLVM_VERSION_MAJOR EQUAL 17)
+  set(QDP_LLVM17 1)
+elseif(LLVM_VERSION_MAJOR EQUAL 18)
+  set(QDP_LLVM18 1)
+elseif(LLVM_VERSION_MAJOR EQUAL 19)
+  set(QDP_LLVM19 1)
+elseif(LLVM_VERSION_MAJOR EQUAL 20)
+  set(QDP_LLVM20 1)
+elseif(LLVM_VERSION_MAJOR EQUAL 22)
+  set(QDP_LLVM22 1)
+else()
+  message(FATAL_ERROR
+    "Unsupported LLVM major version ${LLVM_VERSION_MAJOR}. "
+    "Please add a QDP_LLVM${LLVM_VERSION_MAJOR} compatibility block.")
+endif()
+
+
+
+
+if(QDP_ENABLE_BACKEND STREQUAL "ROCM")
+  file(REAL_PATH "${ROCM_PATH}" ROCM_REAL)
+  file(REAL_PATH "${LLVM_DIR}" LLVM_DIR_REAL)
+
+  string(FIND "${LLVM_DIR_REAL}" "${ROCM_REAL}" LLVM_DIR_INSIDE_ROCM)
+
+  if(LLVM_DIR_INSIDE_ROCM EQUAL -1)
+    message(WARNING
+      "ROCm backend is enabled, but LLVM_DIR does not appear to come from ROCM_PATH.\n"
+      "  ROCM_PATH = ${ROCM_PATH}\n"
+      "  LLVM_DIR  = ${LLVM_DIR}\n"
+      "This may fail when reading ROCm device bitcode. Prefer:\n"
+      "  -DLLVM_DIR=${ROCM_PATH}/lib/llvm/lib/cmake/llvm")
+  endif()
+endif()
+
+
+if(QDP_ENABLE_BACKEND STREQUAL "ROCM")
+  set(QDP_ROCM_BITCODE_DIR "${ROCM_PATH}/amdgcn/bitcode" CACHE PATH "ROCm AMDGCN bitcode directory")
+
+  set(QDP_ROCM_REQUIRED_BC
+    ocml.bc
+    oclc_finite_only_off.bc
+    oclc_unsafe_math_off.bc
+    oclc_daz_opt_off.bc
+    oclc_correctly_rounded_sqrt_on.bc
+    oclc_abi_version_500.bc
+  )
+
+  foreach(bc IN LISTS QDP_ROCM_REQUIRED_BC)
+    if(NOT EXISTS "${QDP_ROCM_BITCODE_DIR}/${bc}")
+      message(FATAL_ERROR "Required ROCm device bitcode not found: ${QDP_ROCM_BITCODE_DIR}/${bc}")
+    endif()
+  endforeach()
+endif()
 
 
 

@@ -77,14 +77,14 @@
 using namespace llvm::orc;
 #endif
 
-#ifdef QDP_BACKEND_ROCM
-#include "lld/Common/Driver.h"
-#include "lld/Common/ErrorHandler.h"
-#include "lld/Common/Memory.h"
-#if ! defined(QDP_ROCM_PRE)
-#include "lld/Common/CommonLinkerContext.h"
-#endif
-#endif
+//#ifdef QDP_BACKEND_ROCM
+//#include "lld/Common/Driver.h"
+//#include "lld/Common/ErrorHandler.h"
+//#include "lld/Common/Memory.h"
+//#if ! defined(QDP_ROCM_PRE)
+//#include "lld/Common/CommonLinkerContext.h"
+//#endif
+//#endif
 
 #ifdef QDP_BACKEND_L0
 #include "LLVMSPIRVLib/LLVMSPIRVLib.h"
@@ -185,6 +185,7 @@ namespace QDP
 
 #ifdef QDP_BACKEND_ROCM
 
+#if 0
 #if defined (LLD_HAS_DRIVER)
 LLD_HAS_DRIVER(elf)
 #endif
@@ -211,7 +212,7 @@ namespace {
   }
 }
 #endif
-
+#endif
 
 namespace QDP
 {
@@ -2787,6 +2788,7 @@ static void rewriteROCmLibmCallsToOCML(llvm::Module &M)
     swatch.stop();
     func.time_codegen = swatch.getTimeInMicroseconds();
 
+#if 0
     //
     // Call linker as a library
     //    
@@ -2811,6 +2813,23 @@ static void rewriteROCmLibmCallsToOCML(llvm::Module &M)
       {
 	QDPIO::cout << "Linker invocation successful" << std::endl;
       }
+#else
+    std::string command =
+    std::string(QDP_ROCM_LD_LLD) +
+    " -shared " +
+    isabin_path +
+    " -o " +
+    shared_path;
+
+    if (jit_config_get_verbose_output()) {
+      QDPIO::cout << "System linker call: " << command << "\n";
+    }
+
+    int rc = system(command.c_str());
+    if (rc != 0) {
+      QDP_error_exit("calling ROCm ld.lld failed");
+    }
+#endif
 
     if (! jit_config_get_keepfiles() )
       {

@@ -142,8 +142,10 @@ if( QDP_ENABLE_BACKEND STREQUAL "ROCM" )
   list(APPEND QDPJIT_LLVM_COMPONENTS 
 	AMDGPU
 	)
-  target_include_directories(jit PUBLIC ${LLD_INCLUDE_DIRS} )
-  target_link_libraries( jit PUBLIC ${LLD_EXPORTED_TARGETS} )
+  target_compile_definitions(jit PUBLIC
+    ROCM_DIR="${ROCM_PATH}"
+    QDP_ROCM_LD_LLD="${QDP_ROCM_LD_LLD}"
+  )
 endif()
 
 if( QDP_ENABLE_BACKEND STREQUAL "L0" )
