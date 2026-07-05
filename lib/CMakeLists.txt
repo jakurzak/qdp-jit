@@ -30,6 +30,23 @@ add_library(qdp qdp_map.cc
 
 add_library(jit qdp_llvm.cc)
 
+if(LLVM_LIBRARY_DIRS)
+  list(GET LLVM_LIBRARY_DIRS 0 QDP_LLVM_LIBRARY_DIR)
+else()
+  get_filename_component(QDP_LLVM_LIBRARY_DIR "${LLVM_DIR}/../../../lib" ABSOLUTE)
+endif()
+
+message(STATUS "QDP-JIT: LLVM library directory: ${QDP_LLVM_LIBRARY_DIR}")
+
+target_link_options(jit INTERFACE
+  "LINKER:-rpath,${QDP_LLVM_LIBRARY_DIR}"
+)
+
+target_link_options(qdp INTERFACE
+  "LINKER:-rpath,${QDP_LLVM_LIBRARY_DIR}"
+)
+
+
 if (QDP_ENABLE_MANAGED_MEMORY)
   target_sources(qdp PRIVATE qdp_alloc_cache.cc)
 endif()
@@ -50,6 +67,28 @@ if( QDP_ENABLE_BACKEND STREQUAL "L0" )
   target_sources(qdp PRIVATE qdp_gpu_l0.cc)
   target_link_libraries(qdp PUBLIC ${LevelZero_LIBRARIES})
   target_include_directories(qdp PUBLIC ${LevelZero_INCLUDE_DIRS})
+endif()
+
+
+
+if(QDP_ENABLE_BACKEND STREQUAL "ROCM")
+  target_link_options(jit INTERFACE
+    "LINKER:-rpath,${QDP_LLVM_LIBRARY_DIR}"
+    "LINKER:-rpath,${ROCM_PATH}/lib"
+  )
+
+  target_link_options(qdp INTERFACE
+    "LINKER:-rpath,${QDP_LLVM_LIBRARY_DIR}"
+    "LINKER:-rpath,${ROCM_PATH}/lib"
+  )
+else()
+  target_link_options(jit INTERFACE
+    "LINKER:-rpath,${QDP_LLVM_LIBRARY_DIR}"
+  )
+
+  target_link_options(qdp INTERFACE
+    "LINKER:-rpath,${QDP_LLVM_LIBRARY_DIR}"
+  )
 endif()
 
 

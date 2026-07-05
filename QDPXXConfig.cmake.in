@@ -28,7 +28,7 @@ endif()
 
 if ( QDP_PARALLEL_ARCH STREQUAL "parscalar" )
   message(STATUS "QDP++: Parscalar build" )
-elseif( QDP_PARALLEL_ARCH "scalar" )
+elseif( QDP_PARALLEL_ARCH STREQUAL "scalar" )
   message(STATUS "QDP++: Scalar build" )
 endif()
 
@@ -69,38 +69,6 @@ endif()
 
 
 
-set(QDP_ENABLE_LLVM14 @QDP_ENABLE_LLVM14@)
-set(QDP_ENABLE_LLVM15 @QDP_ENABLE_LLVM15@)
-set(QDP_ENABLE_LLVM16 @QDP_ENABLE_LLVM16@)
-set(QDP_ENABLE_LLVM17 @QDP_ENABLE_LLVM17@)
-set(QDP_ENABLE_LLVM18 @QDP_ENABLE_LLVM18@)
-set(QDP_ENABLE_LLVM19 @QDP_ENABLE_LLVM19@)
-set(QDP_ENABLE_LLVM22 @QDP_ENABLE_LLVM22@)
-
-if(QDP_ENABLE_LLVM14)
-  set(QDP_LLVM14 "1")
-endif()
-if(QDP_ENABLE_LLVM15)
-  set(QDP_LLVM15 "1")
-endif()
-if(QDP_ENABLE_LLVM16)
-  set(QDP_LLVM16 "1")
-endif()
-if(QDP_ENABLE_LLVM17)
-  set(QDP_LLVM17 "1")
-endif()
-if(QDP_ENABLE_LLVM18)
-  set(QDP_LLVM18 "1")
-endif()
-if(QDP_ENABLE_LLVM19)
-  set(QDP_LLVM19 "1")
-endif()
-if(QDP_ENABLE_LLVM20)
-  set(QDP_LLVM20 "1")
-endif()
-if(QDP_ENABLE_LLVM22)
-  set(QDP_LLVM22 "1")
-endif()
 
 
 set(QDP_PROP_OPT @QDP_PROP_OPT@)
@@ -134,25 +102,74 @@ if("@QIO_DIR@" STREQUAL "")
 endif()
 
 
+
+set(QDP_ENABLE_BACKEND @QDP_ENABLE_BACKEND@)
+set(QDP_ROCM_PATH_CONFIGURED "@ROCM_PATH@")
+
+
+set(QDP_LLVM_VERSION_MAJOR @QDP_LLVM_VERSION_MAJOR@)
+set(QDP_LLVM_VERSION_MINOR @QDP_LLVM_VERSION_MINOR@)
+set(QDP_LLVM_PACKAGE_VERSION "@LLVM_PACKAGE_VERSION@")
+
+if(QDP_BACKEND_ROCM)
+  set(QDP_ROCM_PATH_CONFIGURED "@ROCM_PATH@")
+
+  if(NOT DEFINED ROCM_PATH)
+    if(DEFINED ENV{ROCM_PATH})
+      set(ROCM_PATH "$ENV{ROCM_PATH}" CACHE PATH "ROCm installation prefix")
+    elseif(NOT QDP_ROCM_PATH_CONFIGURED STREQUAL "")
+      set(ROCM_PATH "${QDP_ROCM_PATH_CONFIGURED}" CACHE PATH "ROCm installation prefix")
+    else()
+      set(ROCM_PATH "/opt/rocm" CACHE PATH "ROCm installation prefix")
+    endif()
+  endif()
+
+  if(NOT DEFINED LLVM_DIR)
+    set(LLVM_DIR "${ROCM_PATH}/lib/llvm/lib/cmake/llvm"
+        CACHE PATH "LLVMConfig.cmake from ROCm LLVM")
+  endif()
+
+  list(PREPEND CMAKE_PREFIX_PATH
+    "${ROCM_PATH}"
+    "${ROCM_PATH}/lib/llvm"
+  )
+endif()
+
 find_package(LLVM CONFIG REQUIRED)
 
-if(QDP_ENABLE_LLVM22 AND NOT LLVM_VERSION_MAJOR EQUAL 22)
-  message(FATAL_ERROR "LLVM 22.x required but found ${LLVM_PACKAGE_VERSION}")
-elseif(QDP_ENABLE_LLVM20 AND NOT LLVM_VERSION_MAJOR EQUAL 20)
-  message(FATAL_ERROR "LLVM 20.x required but found ${LLVM_PACKAGE_VERSION}")
-elseif(QDP_ENABLE_LLVM19 AND NOT LLVM_VERSION_MAJOR EQUAL 19)
-  message(FATAL_ERROR "LLVM 19.x required but found ${LLVM_PACKAGE_VERSION}")
-elseif(QDP_ENABLE_LLVM18 AND NOT LLVM_VERSION_MAJOR EQUAL 18)
-  message(FATAL_ERROR "LLVM 18.x required but found ${LLVM_PACKAGE_VERSION}")
-elseif(QDP_ENABLE_LLVM17 AND NOT LLVM_VERSION_MAJOR EQUAL 17)
-  message(FATAL_ERROR "LLVM 17.x required but found ${LLVM_PACKAGE_VERSION}")
-elseif(QDP_ENABLE_LLVM16 AND NOT LLVM_VERSION_MAJOR EQUAL 16)
-  message(FATAL_ERROR "LLVM 16.x required but found ${LLVM_PACKAGE_VERSION}")
-elseif(QDP_ENABLE_LLVM15 AND NOT LLVM_VERSION_MAJOR EQUAL 15)
-  message(FATAL_ERROR "LLVM 15.x required but found ${LLVM_PACKAGE_VERSION}")
-elseif(QDP_ENABLE_LLVM14 AND NOT LLVM_VERSION_MAJOR EQUAL 14)
-  message(FATAL_ERROR "LLVM 14.x required but found ${LLVM_PACKAGE_VERSION}")
+if(NOT LLVM_VERSION_MAJOR EQUAL QDP_LLVM_VERSION_MAJOR)
+  message(FATAL_ERROR
+    "QDPXX was built with LLVM major version ${QDP_LLVM_VERSION_MAJOR} "
+    "(${QDP_LLVM_PACKAGE_VERSION}), but this project found "
+    "LLVM ${LLVM_PACKAGE_VERSION}. "
+    "Use a compatible LLVM installation, for example by setting LLVM_DIR.")
 endif()
+
+message(STATUS "QDPXX: Found compatible LLVM ${LLVM_PACKAGE_VERSION}")
+message(STATUS "QDPXX: Using LLVMConfig.cmake in ${LLVM_DIR}")
+
+if(LLVM_VERSION_MAJOR EQUAL 14)
+  set(QDP_LLVM14 1)
+elseif(LLVM_VERSION_MAJOR EQUAL 15)
+  set(QDP_LLVM15 1)
+elseif(LLVM_VERSION_MAJOR EQUAL 16)
+  set(QDP_LLVM16 1)
+elseif(LLVM_VERSION_MAJOR EQUAL 17)
+  set(QDP_LLVM17 1)
+elseif(LLVM_VERSION_MAJOR EQUAL 18)
+  set(QDP_LLVM18 1)
+elseif(LLVM_VERSION_MAJOR EQUAL 19)
+  set(QDP_LLVM19 1)
+elseif(LLVM_VERSION_MAJOR EQUAL 20)
+  set(QDP_LLVM20 1)
+elseif(LLVM_VERSION_MAJOR EQUAL 22)
+  set(QDP_LLVM22 1)
+else()
+  message(FATAL_ERROR
+    "Unsupported LLVM major version ${LLVM_VERSION_MAJOR}.")
+endif()
+
+
 
 
 find_dependency(XPathReader REQUIRED)
@@ -184,21 +201,30 @@ endif()
 # Target Dependent dependencies
 if( QDP_BACKEND_CUDA )
   find_dependency(CUDAToolkit REQUIRED)
-elseif( QDP_BACKEND_ROCM )
-   if( NOT DEFINED ROCM_PATH )
-    if( NOT DEFINED ENV{ROCM_PATH})
-      set(ROCM_PATH "/opt/rocm" CACHE_PATH "ROCm PATH")
+elseif(QDP_BACKEND_ROCM)
+  if(NOT DEFINED ROCM_PATH)
+    if(DEFINED ENV{ROCM_PATH})
+      set(ROCM_PATH "$ENV{ROCM_PATH}" CACHE PATH "ROCm installation prefix")
+    elseif(NOT QDP_ROCM_PATH_CONFIGURED STREQUAL "")
+      set(ROCM_PATH "${QDP_ROCM_PATH_CONFIGURED}" CACHE PATH "ROCm installation prefix")
     else()
-      set(ROCM_PATH $ENV{ROCM_PATH} CACHE PATH "ROCm PATH")
+      set(ROCM_PATH "/opt/rocm" CACHE PATH "ROCm installation prefix")
     endif()
   endif()
 
-  set(GPU_TARGETS @GPU_TARGETS@)
-  message(STATUS "Setting  to ${GPU_TARGETS}")
-  set(CMAKE_MODULE_PATH "${ROCM_PATH}/lib/cmake" ${CMAKE_MODULE_PATH})
- 
+  if(NOT DEFINED hip_DIR)
+    set(hip_DIR "${ROCM_PATH}/lib/cmake/hip"
+        CACHE PATH "HIP CMake package")
+  endif()
+
+  list(PREPEND CMAKE_PREFIX_PATH
+    "${ROCM_PATH}"
+    "${ROCM_PATH}/lib/cmake"
+    "${ROCM_PATH}/lib/llvm"
+  )
+
   find_dependency(hip REQUIRED)
-  find_dependency(LLD REQUIRED)
+
   set(QDP_USE_ROCM_STATS @QDP_USE_ROCM_STATS@)
   if(QDP_USE_ROCM_STATS)
     find_dependency(amd_comgr REQUIRED)
