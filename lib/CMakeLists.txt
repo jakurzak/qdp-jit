@@ -30,6 +30,23 @@ add_library(qdp qdp_map.cc
 
 add_library(jit qdp_llvm.cc)
 
+if(LLVM_LIBRARY_DIRS)
+  list(GET LLVM_LIBRARY_DIRS 0 QDP_LLVM_LIBRARY_DIR)
+else()
+  get_filename_component(QDP_LLVM_LIBRARY_DIR "${LLVM_DIR}/../../../lib" ABSOLUTE)
+endif()
+
+message(STATUS "QDP-JIT: LLVM library directory: ${QDP_LLVM_LIBRARY_DIR}")
+
+target_link_options(jit INTERFACE
+  "LINKER:-rpath,${QDP_LLVM_LIBRARY_DIR}"
+)
+
+target_link_options(qdp INTERFACE
+  "LINKER:-rpath,${QDP_LLVM_LIBRARY_DIR}"
+)
+
+
 if (QDP_ENABLE_MANAGED_MEMORY)
   target_sources(qdp PRIVATE qdp_alloc_cache.cc)
 endif()
@@ -50,6 +67,28 @@ if( QDP_ENABLE_BACKEND STREQUAL "L0" )
   target_sources(qdp PRIVATE qdp_gpu_l0.cc)
   target_link_libraries(qdp PUBLIC ${LevelZero_LIBRARIES})
   target_include_directories(qdp PUBLIC ${LevelZero_INCLUDE_DIRS})
+endif()
+
+
+
+if(QDP_ENABLE_BACKEND STREQUAL "ROCM")
+  target_link_options(jit INTERFACE
+    "LINKER:-rpath,${QDP_LLVM_LIBRARY_DIR}"
+    "LINKER:-rpath,${ROCM_PATH}/lib"
+  )
+
+  target_link_options(qdp INTERFACE
+    "LINKER:-rpath,${QDP_LLVM_LIBRARY_DIR}"
+    "LINKER:-rpath,${ROCM_PATH}/lib"
+  )
+else()
+  target_link_options(jit INTERFACE
+    "LINKER:-rpath,${QDP_LLVM_LIBRARY_DIR}"
+  )
+
+  target_link_options(qdp INTERFACE
+    "LINKER:-rpath,${QDP_LLVM_LIBRARY_DIR}"
+  )
 endif()
 
 
@@ -96,17 +135,56 @@ target_include_directories( jit PUBLIC
         $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/../include>
         $<BUILD_INTERFACE:${CMAKE_CURRENT_BINARY_DIR}/../include>
         $<INSTALL_INTERFACE:include> )
+
+
 target_include_directories(jit PUBLIC ${LLVM_INCLUDE_DIRS} )
-if( "LLVM" IN_LIST LLVM_AVAILABLE_LIBS )
-	target_link_libraries( jit PUBLIC LLVM )
-else()
-	target_link_libraries( jit PUBLIC ${LLVM_AVAILABLE_LIBS} )
+
+
+set(QDPJIT_LLVM_COMPONENTS
+  Core
+  Support
+  Analysis
+  TransformUtils
+  ScalarOpts
+  InstCombine
+  Vectorize
+  ipo
+  Passes
+  IRReader
+  BitReader
+  BitWriter
+  AsmParser
+  AsmPrinter
+  Target
+  CodeGen
+  MC
+  MCParser
+  BinaryFormat
+  Object
+  ExecutionEngine
+  RuntimeDyld
+  Linker
+  Demangle
+  MCJIT
+  TargetParser
+)
+
+if(QDP_ENABLE_BACKEND STREQUAL "CUDA")
+  list(APPEND QDPJIT_LLVM_COMPONENTS
+    NVPTXCodeGen
+    NVPTXDesc
+    NVPTXInfo
+  )
 endif()
-target_link_libraries( jit PUBLIC QMP::qmp)
 
 if( QDP_ENABLE_BACKEND STREQUAL "ROCM" )
-  target_include_directories(jit PUBLIC ${LLD_INCLUDE_DIRS} )
-  target_link_libraries( jit PUBLIC ${LLD_EXPORTED_TARGETS} )
+  list(APPEND QDPJIT_LLVM_COMPONENTS 
+	AMDGPU
+	)
+  target_compile_definitions(jit PUBLIC
+    ROCM_DIR="${ROCM_PATH}"
+    QDP_ROCM_LD_LLD="${QDP_ROCM_LD_LLD}"
+  )
 endif()
 
 if( QDP_ENABLE_BACKEND STREQUAL "L0" )
@@ -115,6 +193,16 @@ if( QDP_ENABLE_BACKEND STREQUAL "L0" )
   target_link_libraries(jit PUBLIC ${PKG_LLVMSPIRV_LIBRARIES})
   target_include_directories(jit PUBLIC ${PKG_LLVMSPIRV_INCLUDE_DIRS})
 endif()
+
+
+llvm_map_components_to_libnames(QDPJIT_LLVM_LIBS
+  ${QDPJIT_LLVM_COMPONENTS}
+)
+
+target_link_libraries(jit PUBLIC ${QDPJIT_LLVM_LIBS})
+
+target_link_libraries( jit PUBLIC QMP::qmp)
+
 
 
 set_target_properties( jit PROPERTIES CXX_STANDARD 17 )
