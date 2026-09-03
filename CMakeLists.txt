@@ -341,7 +341,14 @@ elseif(LLVM_VERSION_MAJOR EQUAL 19)
   set(QDP_LLVM19 1)
 elseif(LLVM_VERSION_MAJOR EQUAL 20)
   set(QDP_LLVM20 1)
-elseif(LLVM_VERSION_MAJOR EQUAL 22)
+elseif(LLVM_VERSION_MAJOR GREATER_EQUAL 22)
+  # QDP_LLVM22 is not "the LLVM 22 API", it is the newest API this tree knows:
+  # every guard naming an older version carries QDP_LLVM22 as the last term of
+  # its || chain, and the blocks naming 22 alone keep the old code in their
+  # #else. So 22 is also the right branch for anything newer, and staying on it
+  # lets the tree build against an LLVM trunk (ROCm 7.14 ships 23.0.0git).
+  # If a later LLVM does break something, it breaks during the compile naming a
+  # real symbol, which is more useful than refusing to configure.
   set(QDP_LLVM22 1)
 else()
   message(FATAL_ERROR
