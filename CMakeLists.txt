@@ -379,18 +379,41 @@ endif()
 if(QDP_ENABLE_BACKEND STREQUAL "ROCM")
   set(QDP_ROCM_BITCODE_DIR "${ROCM_PATH}/amdgcn/bitcode" CACHE PATH "ROCm AMDGCN bitcode directory")
 
+  # Present in every ROCm, and referenced by ocml.bc: llvm-nm --undefined-only
+  # on ocml.bc lists exactly __oclc_ISA_version, __oclc_finite_only_opt and
+  # __oclc_unsafe_math_opt. Missing one of these is a broken installation.
   set(QDP_ROCM_REQUIRED_BC
     ocml.bc
     oclc_finite_only_off.bc
     oclc_unsafe_math_off.bc
+    oclc_abi_version_500.bc
+  )
+
+  # Retired by AMD during ROCm 7.x -- the *controls* went away, not just the
+  # files: there is no oclc_daz_opt_on.bc or oclc_correctly_rounded_sqrt_off.bc
+  # either, while every surviving control still ships as an _off/_on pair.
+  # ocml.bc no longer references the symbols they defined, so their absence
+  # leaves nothing dangling. They must stay optional rather than being deleted:
+  # on an older ROCm they do exist and ocml.bc does reference them, and dropping
+  # them there would leave an undefined symbol at JIT time.
+  #
+  # llvm_init_ocml() in lib/qdp_llvm.cc already warns and skips a bitcode file
+  # it cannot find, so this list is only a configure-time courtesy. It must not
+  # be stricter than the loader it mirrors.
+  set(QDP_ROCM_OPTIONAL_BC
     oclc_daz_opt_off.bc
     oclc_correctly_rounded_sqrt_on.bc
-    oclc_abi_version_500.bc
   )
 
   foreach(bc IN LISTS QDP_ROCM_REQUIRED_BC)
     if(NOT EXISTS "${QDP_ROCM_BITCODE_DIR}/${bc}")
       message(FATAL_ERROR "Required ROCm device bitcode not found: ${QDP_ROCM_BITCODE_DIR}/${bc}")
+    endif()
+  endforeach()
+
+  foreach(bc IN LISTS QDP_ROCM_OPTIONAL_BC)
+    if(NOT EXISTS "${QDP_ROCM_BITCODE_DIR}/${bc}")
+      message(STATUS "ROCm device bitcode ${bc} is absent; this ROCm has retired that control")
     endif()
   endforeach()
 endif()
